@@ -1,0 +1,153 @@
+/* styles.css */
+body {
+    background-color: palegreen; /* Set background color to pale green */
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    text-align: center;
+    padding: 20px;
+}
+
+.title h1 {
+    font-size: 2.5em;
+    color: darkgreen;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+}
+
+.emphasize {
+    color: darkred;
+}
+
+.game-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-gap: 20px;
+    margin-top: 40px;
+}
+
+.game-button {
+    padding: 20px;
+    font-size: 1.5em;
+    background-color: lightblue;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.game-button:hover {
+    background-color: deepskyblue;
+}
+
+.bottom-buttons {
+    margin-top: 40px;
+}
+
+.bottom-buttons button {
+    margin: 0 10px;
+    padding: 10px 20px;
+    font-size: 1.2em;
+    background-color: lightgray;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.bottom-buttons button:hover {
+    background-color: gray;
+}
+
+.sound-toggle {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+    margin-right: 10px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: #2196F3;
+}
+
+input:checked + .slider:before {
+    transform: translateX(20px);
+}
+/* Enlarged username input */
+.username-input {
+    width: 250px;
+    height: 40px;
+    font-size: 18px;
+    padding: 5px;
+    border-radius: 5px;
+    margin-top: 15px;
+}
+
+/* Top leaderboard button */
+.top-buttons {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.leaderboard-button {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    background-color: #4CAF50;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.leaderboard-button:hover {
+    background-color: #45a049;
+}
+
+/* Game buttons in a 1x2 grid */
+.game-grid {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 30px;
+}

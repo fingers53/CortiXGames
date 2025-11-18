@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reaction Game Leaderboard</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #b3d3a6;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2em;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .end-screen {
+            background-color: #fff7d6;
+            border: 13px solid #ffd580;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .leaderboard-table {
+            width: 100%;
+            margin: 10px 0;
+            border-collapse: collapse;
+        }
+
+        .leaderboard-table th, .leaderboard-table td {
+            padding: 12px;
+            border: 2px solid #f4a460;
+            background-color: #fffaf0;
+        }
+
+        .leaderboard-table th {
+            background-color: #ffd580;
+            font-weight: bold;
+        }
+
+        .game-button {
+            font-size: 1.2em;
+            margin-top: 20px;
+            padding: 10px 20px;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        .game-button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Reaction Game Leaderboard</h1>
+        <div id="reaction-leaderboard" class="end-screen">
+            <p>Loading reaction game scores...</p>
+        </div>
+        <button onclick="window.location.href='/'" class="game-button">Home</button>
+    </div>
+
+    <script>
+        async function loadLeaderboard() {
+            try {
+                const response = await fetch('/api/leaderboard/reaction-game');
+                const data = await response.json();
+                const scores = data.scores.slice(0, 100); // Limit to 100 scores
+
+                const leaderboardContainer = document.getElementById('reaction-leaderboard');
+                leaderboardContainer.innerHTML = ''; // Clear loading message
+
+                const table = document.createElement('table');
+                table.className = "leaderboard-table";
+
+                // Table header
+                const header = document.createElement('tr');
+                header.innerHTML = `
+                    <th>Rank</th>
+                    <th>Username</th>
+                    <th>Score</th>
+                    <th>Avg Reaction Time (ms)</th>
+                `;
+                table.appendChild(header);
+
+                // Table rows for scores
+                scores.forEach((score, index) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${index + 1}</td>
+                        <td>${score[0]}</td>
+                        <td>${score[1]}</td>
+                        <td>${score[2].toFixed(2)}</td>
+                    `;
+                    table.appendChild(row);
+                });
+
+                leaderboardContainer.appendChild(table);
+            } catch (error) {
+                console.error('Error loading leaderboard data:', error);
+                document.getElementById('reaction-leaderboard').innerHTML = '<p>Failed to load leaderboard data.</p>';
+            }
+        }
+
+        window.onload = loadLeaderboard;
+    </script>
+</body>
+</html>

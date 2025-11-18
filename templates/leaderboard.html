@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Leaderboard</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px;
+        }
+        .leaderboard-button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+            font-weight: bold;
+            text-decoration: none;
+            color: black;
+        }
+        .leaderboard-button:hover {
+            background-color: #f4a460;
+            color: white;
+        }
+        .leaderboard-content {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Leaderboard</h1>
+
+        <!-- Buttons for navigating to each game's leaderboard -->
+        <div class="button-container">
+            <a href="/leaderboard/reaction-game" class="leaderboard-button">Reaction Game</a>
+            <a href="/leaderboard/memory-game" class="leaderboard-button">Memory Game</a>
+        </div>
+    </div>
+</body>
+</html>

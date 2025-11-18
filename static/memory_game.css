@@ -1,0 +1,102 @@
+/* Body styles */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background-color: #b0b0b0; /* Steel grey background */
+}
+
+/* Game container for canvas and timer */
+#gameContainer {
+    position: relative;
+    text-align: center;
+}
+
+/* Timer display styling */
+#timerDisplay {
+    position: absolute;
+    top: -30px; /* Position above the canvas */
+    right: 0;
+    left: 0;
+    font-size: 1.5em;
+    color: black;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 5px 10px;
+    border-radius: 5px;
+    text-align: center;
+    display: none;
+}
+
+/* Canvas styling */
+#gameCanvas {
+    max-width: 90vw;
+    max-height: 90vh;
+    background-size: 20% 20%; /* 5x5 grid */
+    border: 1px solid #ccc;
+}
+
+/* General overlay styles */
+.overlay {
+    font-size: 2em;
+    margin: 10px;
+}
+
+/* Feedback overlay styling */
+#feedbackOverlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60%; /* Larger box width */
+    padding: 20px;
+    background-color: rgba(0, 0, 0, 0.3); /* Increased transparency */
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    border-radius: 10px;
+    display: none; /* Hidden by default */
+    text-align: center;
+    z-index: 10;
+}
+
+#feedbackOverlay.correct {
+    color: green;
+}
+
+#feedbackOverlay.incorrect {
+    color: red;
+}
+
+/* Intro display styling */
+#introDisplay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60%;
+    padding: 20px;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    border-radius: 10px;
+    display: none; /* Hidden by default */
+    text-align: center;
+    z-index: 10;
+}
+
+#introDisplay h2 {
+    font-size: 36px;
+}
+
+#introDisplay p {
+    font-size: 48px; /* Larger font for countdown */
+}
+
+/* Countdown display */
+#countdownDisplay {
+    font-size: 2em;
+    margin: 10px;
+}

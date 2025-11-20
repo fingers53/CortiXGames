@@ -1,30 +1,36 @@
+/**
+ * Reaction game front-end logic.
+ * Handles countdown -> gameplay -> end screen flow, tracks per-question stats,
+ * and submits the score payload to the existing backend endpoint.
+ */
+
+// Timing and animation constants
+const maxDelay = 0.6 * 1000;
+const minDelay = 0.25 * 1000;
+const slowThreshold = 550;
+const blackoutTime = 400;
+const bounceInterval = 53;
+const maxJiggle = 10;
+
+// Game state
 let score = 0;
 let timer = 45;
 let countdown;
+let countdownInterval;
 let correctSide;
+let questionStartTime;
 let totalReactionTime = 0;
 let correctClicks = 0;
 let incorrectClicks = 0;
 let slowAnswers = 0;
 let fastestTime = null;
 let slowestTime = 0;
-let questionStartTime;
-let countdownInterval;
-let answerRecord = []; // Array to store each answer's details
-let penaltyMessage = ""; // To hold the explanation message for the penalty
-
+let answerRecord = [];
+let penaltyMessage = "";
 let middleBallShown = false;
+let lockInput = false;
+let sessionToken = null; // Reserved for future secure scoring
 
-const maxDelay = 0.6 * 1000; // Maximum delay in ms
-const minDelay = 0.25 * 1000; // Minimum delay in ms
-const slowThreshold = 550; // 550ms threshold for slow reactions
-const blackoutTime = 400; // Blackout time between rounds in ms
-const bounceInterval = 53; // Bounce interval for rhythmic bouncing
-const maxJiggle = 10; // Maximum movement range for Brownian motion
-
-let sessionToken = null;
-
-// Function to display a countdown before the game starts
 function startCountdown() {
     let countdownValue = 3;
     const countdownDisplay = document.getElementById("countdown");
@@ -44,27 +50,25 @@ function startCountdown() {
     }, 1000);
 }
 
-// Function to start the game and request a session token
 function startGame() {
-        // Proceed with starting the game
-        document.getElementById('game-container').style.display = 'block';
-        middleBallShown = false;
-        lockInput = false;
-        console.log(sessionToken);
-        countdown = setInterval(() => {
-            if (timer > 0) {
-                timer--;
-                document.getElementById('timer').textContent = timer;
-            } else {
-                clearInterval(countdown);
-                showEndScreen();
-            }
-        }, 1000);
-        startNewRound();
-        startBouncing();
-    }
+    document.getElementById('game-container').style.display = 'block';
+    middleBallShown = false;
+    lockInput = false;
 
-// Function to reset the game
+    countdown = setInterval(() => {
+        if (timer > 0) {
+            timer--;
+            document.getElementById('timer').textContent = timer;
+        } else {
+            clearInterval(countdown);
+            showEndScreen();
+        }
+    }, 1000);
+
+    startNewRound();
+    startBouncing();
+}
+
 function resetGame() {
     score = 0;
     timer = 45;
@@ -85,10 +89,9 @@ function resetGame() {
     startCountdown();
 }
 
-// Function to start a new round
 function startNewRound() {
     middleBallShown = false;
-    lockInput = false; // Unlock input at the start of a new round
+    lockInput = false;
 
     const colors = ["red", "blue"];
     const leftColor = colors[Math.floor(Math.random() * 2)];
@@ -119,7 +122,7 @@ function chooseSide(side) {
     if (!middleBallShown || lockInput) return;
 
     const reactionTime = Date.now() - questionStartTime;
-    let isCorrect = (side === correctSide);
+    const isCorrect = (side === correctSide);
 
     if (isCorrect) {
         correctClicks++;
@@ -138,7 +141,7 @@ function chooseSide(side) {
         reactionTime: reactionTime,
     });
 
-    lockInput = true; // Lock input immediately after a choice
+    lockInput = true;
     document.getElementById("left-ball").style.visibility = "hidden";
     document.getElementById("center-ball").style.visibility = "hidden";
     document.getElementById("right-ball").style.visibility = "hidden";
@@ -146,32 +149,26 @@ function chooseSide(side) {
     setTimeout(startNewRound, blackoutTime);
 }
 
-
-// Function to calculate streak-based adjustments
 function calculateStreaks() {
-    let maxStreak = 0;       // Track the longest streak of incorrect answers
-    let currentStreak = 0;    // Track the current streak
+    let maxStreak = 0;
+    let currentStreak = 0;
 
     for (let i = 0; i < answerRecord.length; i++) {
         if (!answerRecord[i].isCorrect) {
             currentStreak++;
-            // Update maxStreak if the current streak is the longest so far
             if (currentStreak > maxStreak) {
                 maxStreak = currentStreak;
             }
         } else {
-            currentStreak = 0; // Reset streak on a correct answer
+            currentStreak = 0;
         }
     }
 
-    // Set penalty message based on max streak found
-    if (maxStreak > 1) {
-        penaltyMessage = `Penalized for a streak of ${maxStreak} consecutive incorrect answers.`;
-    } else {
-        penaltyMessage = "Great job! No penalty for consecutive incorrect answers.";
-    }
+    penaltyMessage = maxStreak > 1
+        ? `Penalized for a streak of ${maxStreak} consecutive incorrect answers.`
+        : "Great job! No penalty for consecutive incorrect answers.";
 
-    return maxStreak > 1 ? maxStreak : 0; // Apply penalty only for streaks longer than 1
+    return maxStreak > 1 ? maxStreak : 0;
 }
 
 async function showEndScreen() {
@@ -185,9 +182,7 @@ async function showEndScreen() {
         answerRecord
     };
 
-    console.log("Submitting score data:", scoreData);
-
-    fetch("/reaction-game/submit_score", {  // Updated URL
+    fetch("/reaction-game/submit_score", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -245,25 +240,23 @@ async function showEndScreen() {
     });
 }
 
-// Function to start Brownian-like bouncing motion for the left and right balls
 function startBouncing() {
     setInterval(() => {
-        let randomOffsetLeft = Math.floor(Math.random() * 2 * maxJiggle) - maxJiggle;
-        let randomOffsetRight = Math.floor(Math.random() * 2 * maxJiggle) - maxJiggle;
+        const randomOffsetLeft = Math.floor(Math.random() * 2 * maxJiggle) - maxJiggle;
+        const randomOffsetRight = Math.floor(Math.random() * 2 * maxJiggle) - maxJiggle;
 
         document.getElementById("left-ball").style.transform = `translateY(${randomOffsetLeft}px)`;
         document.getElementById("right-ball").style.transform = `translateY(${randomOffsetRight}px)`;
     }, bounceInterval);
 }
 
-// Event listeners for keyboard inputs
-document.addEventListener("keydown", (event) => {
+function chooseSideFromKeyboard(event) {
     if (event.key === "1") {
         chooseSide("left");
     } else if (event.key === "0") {
         chooseSide("right");
     }
-});
+}
 
-// Start the countdown when the page loads
+document.addEventListener("keydown", chooseSideFromKeyboard);
 window.onload = startCountdown;

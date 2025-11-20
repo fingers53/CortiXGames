@@ -1,48 +1,91 @@
-// Function to generate a random 5-digit username as placeholder
+/**
+ * Landing page utilities for username handling and navigation.
+ * Provides validation for usernames and gates game navigation on a saved username
+ * stored in localStorage under the "username" key.
+ */
+
+const USERNAME_KEY = "username";
+
 function setRandomPlaceholder() {
     const usernameInput = document.getElementById("username");
+    if (!usernameInput) return;
     const randomNum = Math.floor(10000 + Math.random() * 90000);
     usernameInput.placeholder = `user_${randomNum}`;
 }
 
-// Function to confirm and save the username
+function validateUsername(name) {
+    const usernameRegex = /^[A-Za-z0-9_]{3,20}$/;
+    return usernameRegex.test(name);
+}
+
 function confirmUsername() {
     const usernameInput = document.getElementById("username");
     const enterButton = document.getElementById("enter-button");
-    const username = usernameInput.value.trim() || usernameInput.placeholder;
+    if (!usernameInput) return;
 
-    // Check if username is already in use
-    const usernames = JSON.parse(localStorage.getItem("usernames")) || [];
-    if (usernames.includes(username)) {
-        alert("Username is already taken. Please choose another one.");
+    const chosen = usernameInput.value.trim() || usernameInput.placeholder || "";
+    if (!validateUsername(chosen)) {
+        alert("Invalid username");
         return;
     }
 
-    // Save the username in localStorage
-    usernames.push(username);
-    localStorage.setItem("usernames", JSON.stringify(usernames));
-    localStorage.setItem("username", username);  // Save for this user's session
-
-    // Style changes after confirmation
-    usernameInput.value = username;
+    localStorage.setItem(USERNAME_KEY, chosen);
+    usernameInput.value = chosen;
     usernameInput.disabled = true;
     usernameInput.style.backgroundColor = "#f0f0f0";
     usernameInput.style.color = "#555";
-    enterButton.style.display = "none";
+
+    if (enterButton) {
+        enterButton.style.display = "none";
+    }
 }
 
-// Set random placeholder on page load
-window.onload = function () {
-    setRandomPlaceholder();
+function getSavedUsername() {
+    return localStorage.getItem(USERNAME_KEY);
+}
 
-    // If a username is already set in localStorage, disable the input
-    const savedUsername = localStorage.getItem("username");
+function ensureUsernameOrAlert() {
+    const saved = getSavedUsername();
+    if (!saved) {
+        alert("Please enter a username before playing.");
+        return false;
+    }
+    return true;
+}
+
+function attachNavigation(buttonId, path) {
+    const button = document.getElementById(buttonId);
+    if (!button) return;
+    button.addEventListener("click", () => {
+        if (ensureUsernameOrAlert()) {
+            window.location.href = path;
+        }
+    });
+}
+
+function hydrateUsernameField() {
+    const usernameInput = document.getElementById("username");
+    const enterButton = document.getElementById("enter-button");
+    const savedUsername = getSavedUsername();
+
+    if (!usernameInput) return;
+
     if (savedUsername) {
-        const usernameInput = document.getElementById("username");
         usernameInput.value = savedUsername;
         usernameInput.disabled = true;
         usernameInput.style.backgroundColor = "#f0f0f0";
         usernameInput.style.color = "#555";
-        document.getElementById("enter-button").style.display = "none";
+        if (enterButton) {
+            enterButton.style.display = "none";
+        }
     }
-};
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+    setRandomPlaceholder();
+    hydrateUsernameField();
+    attachNavigation("memory-button", "/memory-game");
+    attachNavigation("reaction-button", "/reaction-game");
+});
+
+window.confirmUsername = confirmUsername;

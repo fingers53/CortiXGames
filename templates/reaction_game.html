@@ -12,7 +12,7 @@
             <h1>Reaction Game</h1>
             <div id="timer">45</div>
         </div>
-        
+
         <div class="game-area">
             <div id="left-ball" class="ball"></div>
             <div id="center-ball" class="ball center"></div>
@@ -21,31 +21,23 @@
 
         <div class="button-container">
             <button class="game-button" onclick="chooseSide('left')">Left (1)</button>
-            <button class="game-button" onclick="chooseSide('right')">Right (0) </button>
+            <button class="game-button" onclick="chooseSide('right')">Right (0)</button>
         </div>
     </div>
 
-    <!-- Countdown Display -->
     <div id="countdown" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 72px; color: white;"></div>
 
     <div id="end-screen" style="display: none;">
         <h1 id="final-score">Final Score:</h1>
         <div class="score-breakdown">
-            <div class="column" id="score-column">
-                <!-- Score breakdown will be populated here -->
-            </div>
-            <div class="column" id="speed-column">
-                <!-- Speed breakdown will be populated here -->
-            </div>
-            <div class="column" id="streaks-column">
-                <!-- Streaks breakdown will be populated here -->
-            </div>
+            <div class="column" id="score-column"></div>
+            <div class="column" id="speed-column"></div>
+            <div class="column" id="streaks-column"></div>
         </div>
         <button onclick="resetGame()">Play Again</button>
         <button onclick="window.location.href='/'">Home</button>
         <button onclick="window.location.href='/leaderboard/reaction-game'">Leaderboard</button>
     </div>
-    
 
     <script src="/static/reaction_game.js"></script>
 </body>

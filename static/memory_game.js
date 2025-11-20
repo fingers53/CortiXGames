@@ -1,37 +1,29 @@
-let currentRound = 1; // Start with Round 1
-import { initCanvas } from './gameFlow.js';
+/**
+ * Orchestrates the three rounds of the memory game.
+ * Initializes the canvas, chains the round modules, and records per-question
+ * events so later phases can submit the log to the backend.
+ */
 
+import { initCanvas, hideCanvas } from './gameFlow.js';
+import { initRound1 } from './round1.js';
+import { initRound2 } from './round2.js';
+import { initRound3 } from './round3.js';
 
-// Initialize and run the game
-function startGame() {
-    initCanvas(); // Ensure the canvas is set up only once
-    runRound(currentRound);
+export const questionLog = [];
+
+export function logMemoryQuestion(event) {
+    questionLog.push(event);
 }
 
-// Run a specific round based on the round number
-function runRound(roundNumber) {
-    if (roundNumber === 1) {
-        import('./round1.js').then((module) => {
-            module.initRound1(() => proceedToNextRound());
-        });
-    } else if (roundNumber === 2) {
-        import('./round2.js').then((module) => {
-            module.initRound2(() => proceedToNextRound());
-        });
-    } else if (roundNumber === 3) {
-        import('./round3.js').then((module) => {
-            module.initRound3(() => proceedToNextRound());
-        });
-    } else {
-        console.log("Game Over! All rounds complete.");
-    }
-}
-// Proceed to the next round, reset state
-function proceedToNextRound() {
-    console.log("Proceeding to next round:", currentRound + 1);
-    currentRound++;
-    runRound(currentRound); // Run the next round
+export function endMemoryGame() {
+    hideCanvas();
+    console.log("Memory game finished. Question log:", questionLog);
 }
 
-// Start the game when the window loads
-window.onload = startGame;
+export function startMemoryGame() {
+    questionLog.length = 0;
+    initCanvas();
+    initRound1(() => initRound2(() => initRound3(() => endMemoryGame())));
+}
+
+window.addEventListener("DOMContentLoaded", startMemoryGame);

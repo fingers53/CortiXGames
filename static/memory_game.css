@@ -94,9 +94,3 @@ body {
 #introDisplay p {
     font-size: 48px; /* Larger font for countdown */
 }
-
-/* Countdown display */
-#countdownDisplay {
-    font-size: 2em;
-    margin: 10px;
-}

@@ -8,30 +8,22 @@
 </head>
 <body>
     <div class="container">
-        <!-- Title -->
         <div class="title">
             <h1>Eye <span class="emphasize">M</span> See Games</h1>
         </div>
 
-        <!-- Bottom Buttons -->
         <div class="bottom-buttons">
             <button onclick="location.href='/leaderboard'">Leaderboard</button>
-            <!-- Username Input -->
-        <div class="username-container">
-            <input type="text" id="username" placeholder="username_" />
-            <button id="enter-button" onclick="confirmUsername()">Enter</button>
-        </div>
+            <div class="username-container">
+                <input type="text" id="username" class="username-input" placeholder="username_" />
+                <button id="enter-button" onclick="confirmUsername()">Enter</button>
+            </div>
         </div>
 
-        
-
-        <!-- Game Buttons Grid -->
         <div class="game-grid">
-            <button class="game-button" onclick="location.href='/memory-game'">Memory</button>
-            <button class="game-button" onclick="location.href='/reaction-game'">React</button>
+            <button id="memory-button" class="game-button">Memory</button>
+            <button id="reaction-button" class="game-button">React</button>
         </div>
-
-        
     </div>
 
     <script src="/static/main.js"></script>

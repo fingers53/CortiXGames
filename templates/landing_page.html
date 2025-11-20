@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Eye-M-See Games</title>
     <link rel="stylesheet" href="/static/styles.css">
 </head>
@@ -23,6 +24,11 @@
         <div class="game-grid">
             <button id="memory-button" class="game-button">Memory</button>
             <button id="reaction-button" class="game-button">React</button>
+        </div>
+
+        <div id="best-scores" class="best-scores">
+            <p id="best-reaction">Best Reaction: –</p>
+            <p id="best-memory">Best Memory: –</p>
         </div>
     </div>
 

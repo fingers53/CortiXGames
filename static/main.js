@@ -5,6 +5,8 @@
  */
 
 const USERNAME_KEY = "username";
+const bestReaction = document.getElementById("best-reaction");
+const bestMemory = document.getElementById("best-memory");
 
 function setRandomPlaceholder() {
     const usernameInput = document.getElementById("username");
@@ -38,6 +40,8 @@ function confirmUsername() {
     if (enterButton) {
         enterButton.style.display = "none";
     }
+
+    fetchBestScores();
 }
 
 function getSavedUsername() {
@@ -81,9 +85,31 @@ function hydrateUsernameField() {
     }
 }
 
+function renderBestScores(reactionBest, memoryBest) {
+    if (bestReaction) {
+        bestReaction.textContent = `Best Reaction: ${reactionBest ?? "–"}`;
+    }
+    if (bestMemory) {
+        bestMemory.textContent = `Best Memory: ${memoryBest ?? "–"}`;
+    }
+}
+
+function fetchBestScores() {
+    const username = getSavedUsername();
+    if (!username) return;
+
+    fetch(`/api/my-best-scores?username=${encodeURIComponent(username)}`)
+        .then((res) => res.json())
+        .then((data) => {
+            renderBestScores(data.reaction_best, data.memory_best);
+        })
+        .catch((err) => console.error("Failed to fetch best scores:", err));
+}
+
 window.addEventListener("DOMContentLoaded", () => {
     setRandomPlaceholder();
     hydrateUsernameField();
+    fetchBestScores();
     attachNavigation("memory-button", "/memory-game");
     attachNavigation("reaction-button", "/reaction-game");
 });

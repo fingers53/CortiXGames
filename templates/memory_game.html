@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Memory Game</title>
     <link rel="stylesheet" href="/static/memory_game.css">
 </head>
@@ -12,6 +13,7 @@
         <canvas id="gameCanvas"></canvas>
         <div id="introDisplay" class="overlay"></div>
         <div id="feedbackOverlay" class="overlay"></div>
+        <div id="memoryEndScreen" class="end-screen" style="display: none;"></div>
     </div>
 
     <script type="module" src="/static/memory_game.js"></script>

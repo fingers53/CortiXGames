@@ -10,6 +10,7 @@ import { initRound2 } from './round2.js';
 import { initRound3 } from './round3.js';
 
 export const questionLog = [];
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
 export function logMemoryQuestion(event) {
     questionLog.push(event);
@@ -17,7 +18,29 @@ export function logMemoryQuestion(event) {
 
 export function endMemoryGame() {
     hideCanvas();
-    console.log("Memory game finished. Question log:", questionLog);
+    const username = localStorage.getItem("username") || "anonymous";
+
+    fetch("/memory-game/submit_score", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+        },
+        body: JSON.stringify({ username, questionLog }),
+    })
+        .then((res) => res.json())
+        .then((data) => {
+            if (data.status === "success") {
+                showMemoryEndScreen(data.finalScore);
+            } else {
+                console.error("Error saving memory score:", data);
+                showMemoryEndScreen(null);
+            }
+        })
+        .catch((err) => {
+            console.error("Error submitting memory score:", err);
+            showMemoryEndScreen(null);
+        });
 }
 
 export function startMemoryGame() {
@@ -27,3 +50,34 @@ export function startMemoryGame() {
 }
 
 window.addEventListener("DOMContentLoaded", startMemoryGame);
+
+function showMemoryEndScreen(finalScore) {
+    const timerDisplay = document.getElementById("timerDisplay");
+    const introDisplay = document.getElementById("introDisplay");
+    const feedbackOverlay = document.getElementById("feedbackOverlay");
+    const endScreen = document.getElementById("memoryEndScreen");
+
+    if (timerDisplay) timerDisplay.style.display = "none";
+    if (introDisplay) introDisplay.style.display = "none";
+    if (feedbackOverlay) feedbackOverlay.style.display = "none";
+    if (!endScreen) return;
+
+    const scoreSection =
+        finalScore === null
+            ? `<p class="end-score">Score saved locally. Server unavailable.</p>`
+            : `<p class="end-score">Your score: ${finalScore}</p>`;
+
+    endScreen.innerHTML = `
+        <div class="end-card">
+            <h2>Memory Game Finished!</h2>
+            ${scoreSection}
+            <div class="end-actions">
+                <button onclick="window.location.href='/memory-game'">Play Again</button>
+                <button onclick="window.location.href='/'">Home</button>
+                <button onclick="window.location.href='/leaderboard/memory-game'">Leaderboard</button>
+            </div>
+        </div>
+    `;
+
+    endScreen.style.display = "block";
+}

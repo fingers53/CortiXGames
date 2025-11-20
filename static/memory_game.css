@@ -94,3 +94,39 @@ body {
 #introDisplay p {
     font-size: 48px; /* Larger font for countdown */
 }
+
+.end-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.end-card {
+    background: #f7f7f7;
+    padding: 20px;
+    border-radius: 10px;
+    border: 2px solid #ccc;
+    text-align: center;
+}
+
+.end-score {
+    font-size: 1.5em;
+    margin: 10px 0;
+}
+
+.end-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.end-actions button {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    background: #4a90e2;
+    color: #fff;
+}

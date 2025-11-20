@@ -30,6 +30,7 @@ let penaltyMessage = "";
 let middleBallShown = false;
 let lockInput = false;
 let sessionToken = null; // Reserved for future secure scoring
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
 function startCountdown() {
     let countdownValue = 3;
@@ -182,62 +183,34 @@ async function showEndScreen() {
         answerRecord
     };
 
+    const username = localStorage.getItem("username") || "anonymous";
+
     fetch("/reaction-game/submit_score", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
         },
-        body: JSON.stringify({
-            scoreData: scoreData,
-        }),
+        body: JSON.stringify({ username, scoreData }),
     })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.status === "success") {
-            const scoreResult = data.scoreResult;
-            document.getElementById("end-screen").innerHTML = `
-                <div style="background-color: #fdf5e6; border: 3px solid #f4a460; padding: 20px; border-radius: 10px;">
-                    <h1>Final Score: ${scoreResult.finalScore}</h1>
-                    <div class="score-breakdown">
-                        <div class="column">
-                            <h2>Score</h2>
-                            <p>Correct Answers: ${correctClicks}</p>
-                            <p>Incorrect Answers: ${incorrectClicks}</p>
-                            <p>Total: ${correctClicks - incorrectClicks}</p>
-                            <p> Accuracy: ${scoreResult.accuracy}
-                        </div>
-                        <div class="column">
-                            <h2>Speed</h2>
-                            <p>Average Time: ${scoreResult.averageTime} ms</p>
-                            <p>Fastest Time: ${scoreResult.fastestTime} ms</p>
-                            <p>Slowest Time: ${scoreResult.slowestTime} ms</p>
-                            <p>Bonus: Speed: +${scoreResult.speedBonus}</p>
-                            <p>Bonus: Fastest time below 300ms: +${scoreResult.fastestTimeBonus}</p>
-                            <p>Penalty: Slowest time over 500ms: -${scoreResult.slowestTimePenalty}</p>
-                        </div>
-                        <div class="column">
-                            <h2>Streaks</h2>
-                            <p>${scoreResult.penaltyMessage}</p>
-                            <p>Streak Penalty: -${scoreResult.streakPenalty}</p>
-                        </div>
-                    </div>
-                    <button onclick="resetGame()">Play Again</button>
-                    <button onclick="window.location.href='/'">Home</button>
-                    <button onclick="window.location.href='/leaderboard/reaction-game'">Leaderboard</button>
-                </div>
-            `;
-            document.getElementById("game-container").style.display = 'none';
-            document.getElementById("end-screen").style.display = 'block';
-        }
-    })
-    .catch(error => {
-        console.error("Error submitting score:", error);
-    });
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then((data) => {
+            if (data.status === "success") {
+                buildEndScreen(data.scoreResult);
+            } else {
+                console.error("Score submission error:", data);
+                buildEndScreen(computeLocalScore());
+            }
+        })
+        .catch((error) => {
+            console.error("Error submitting score:", error);
+            buildEndScreen(computeLocalScore());
+        });
 }
 
 function startBouncing() {
@@ -260,3 +233,65 @@ function chooseSideFromKeyboard(event) {
 
 document.addEventListener("keydown", chooseSideFromKeyboard);
 window.onload = startCountdown;
+
+function computeLocalScore() {
+    const averageTime = correctClicks > 0 ? totalReactionTime / correctClicks : 0;
+    const speedBonus = averageTime > 0 ? (correctClicks - incorrectClicks) * (1000 / averageTime) : 0;
+    const fastestTimeBonus = fastestTime && fastestTime < 300 ? 300 / fastestTime : 0;
+    const slowestTimePenalty = slowestTime > 500 ? slowestTime / 500 : 0;
+    const streakPenalty = calculateStreaks();
+    const accuracy = (correctClicks + incorrectClicks) > 0 ? (correctClicks / (correctClicks + incorrectClicks)) * 100 : 0;
+    const finalScore = correctClicks - incorrectClicks + speedBonus + fastestTimeBonus - slowestTimePenalty - streakPenalty;
+
+    return {
+        finalScore: Number(finalScore.toFixed(2)),
+        averageTime: Number(averageTime.toFixed(2)),
+        accuracy: Number(accuracy.toFixed(2)),
+        speedBonus: Number(speedBonus.toFixed(2)),
+        fastestTimeBonus: Number(fastestTimeBonus.toFixed(2)),
+        slowestTimePenalty: Number(slowestTimePenalty.toFixed(2)),
+        streakPenalty: Number(streakPenalty.toFixed(2)),
+        fastestTime: Number((fastestTime || 0).toFixed(2)),
+        slowestTime: Number((slowestTime || 0).toFixed(2)),
+        penaltyMessage: penaltyMessage || "Local score computed.",
+    };
+}
+
+function buildEndScreen(scoreResult) {
+    const endScreen = document.getElementById("end-screen");
+    if (!endScreen) return;
+
+    endScreen.innerHTML = `
+        <div style="background-color: #fdf5e6; border: 3px solid #f4a460; padding: 20px; border-radius: 10px;">
+            <h1>Final Score: ${scoreResult.finalScore}</h1>
+            <div class="score-breakdown">
+                <div class="column">
+                    <h2>Score</h2>
+                    <p>Correct Answers: ${correctClicks}</p>
+                    <p>Incorrect Answers: ${incorrectClicks}</p>
+                    <p>Total: ${correctClicks - incorrectClicks}</p>
+                    <p> Accuracy: ${scoreResult.accuracy}</p>
+                </div>
+                <div class="column">
+                    <h2>Speed</h2>
+                    <p>Average Time: ${scoreResult.averageTime} ms</p>
+                    <p>Fastest Time: ${scoreResult.fastestTime} ms</p>
+                    <p>Slowest Time: ${scoreResult.slowestTime} ms</p>
+                    <p>Bonus: Speed: +${scoreResult.speedBonus}</p>
+                    <p>Bonus: Fastest time below 300ms: +${scoreResult.fastestTimeBonus}</p>
+                    <p>Penalty: Slowest time over 500ms: -${scoreResult.slowestTimePenalty}</p>
+                </div>
+                <div class="column">
+                    <h2>Streaks</h2>
+                    <p>${scoreResult.penaltyMessage}</p>
+                    <p>Streak Penalty: -${scoreResult.streakPenalty}</p>
+                </div>
+            </div>
+            <button onclick="resetGame()">Play Again</button>
+            <button onclick="window.location.href='/'">Home</button>
+            <button onclick="window.location.href='/leaderboard/reaction-game'">Leaderboard</button>
+        </div>
+    `;
+    document.getElementById("game-container").style.display = 'none';
+    endScreen.style.display = 'block';
+}

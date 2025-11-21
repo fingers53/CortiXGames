@@ -1,23 +1,24 @@
-// Canvas and Context
+/**
+ * Shared helpers for the memory game canvas, overlays, and timers.
+ * This file owns the canvas state while rounds import its functions
+ * to draw, resize, show overlays, and manage the round timer.
+ */
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Elements
 const introDisplay = document.getElementById("introDisplay");
 const feedbackOverlay = document.getElementById("feedbackOverlay");
 const timerDisplay = document.getElementById("timerDisplay");
 
-// Game variables
 let roundTimer;
-const gridSize = 5; // 5x5 grid
+const gridSize = 5;
 
-// Initialize and resize the canvas
 function initCanvas() {
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
 }
 
-// Resize the canvas to fit the window
 function resizeCanvas() {
     const size = Math.min(window.innerWidth * 0.8, window.innerHeight * 0.8);
     canvas.width = size;
@@ -25,19 +26,35 @@ function resizeCanvas() {
     drawGrid();
 }
 
-// Show intro with customizable text
+function drawGrid() {
+    const cellSize = canvas.width / gridSize;
+    ctx.strokeStyle = "#ddd";
+    ctx.lineWidth = 1;
+    for (let i = 1; i < gridSize; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * cellSize, 0);
+        ctx.lineTo(i * cellSize, canvas.height);
+        ctx.moveTo(0, i * cellSize);
+        ctx.lineTo(canvas.width, i * cellSize);
+        ctx.stroke();
+    }
+}
+
+function clearGrid() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawGrid();
+}
+
 function showIntro(message) {
     introDisplay.innerHTML = `<h2>${message}</h2>`;
     introDisplay.style.display = "block";
     timerDisplay.style.display = "none";
 }
 
-// Hide the intro display
 function hideIntro() {
     introDisplay.style.display = "none";
 }
 
-// Timer setup and management
 function startTimer(roundLength, onTimeOut) {
     let gameTime = roundLength;
     timerDisplay.textContent = `Time Left: ${gameTime}s`;
@@ -55,47 +72,32 @@ function startTimer(roundLength, onTimeOut) {
     }, 1000);
 }
 
-// Stop the timer
 function stopTimer() {
     clearInterval(roundTimer);
     timerDisplay.style.display = "none";
 }
 
-
-// Function to hide the canvas and clear the grid
 function hideCanvas() {
     clearGrid();
-    canvas.style.visibility = "hidden"; // Hide the canvas element
+    canvas.style.visibility = "hidden";
 }
 
-// Function to show the canvas (used at the start of each round)
 function showCanvas() {
-    canvas.style.visibility = "visible"; // Make the canvas visible
+    canvas.style.visibility = "visible";
 }
 
+function showFeedback(message, isCorrect, duration = 800, callback) {
+    feedbackOverlay.textContent = message;
+    feedbackOverlay.style.display = "block";
+    feedbackOverlay.style.color = isCorrect ? "green" : "red";
+    feedbackOverlay.style.fontSize = "2em";
 
-// Function to draw a constant 5x5 grid on the new canvas
-function drawGrid() {
-    const cellSize = canvas.width / gridSize;
-    ctx.strokeStyle = "#ddd";
-    ctx.lineWidth = 1;
-    for (let i = 1; i < gridSize; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * cellSize, 0);
-        ctx.lineTo(i * cellSize, canvas.height);
-        ctx.moveTo(0, i * cellSize);
-        ctx.lineTo(canvas.width, i * cellSize);
-        ctx.stroke();
-    }
+    setTimeout(() => {
+        feedbackOverlay.style.display = "none";
+        if (callback) callback();
+    }, duration);
 }
 
-// Function to clear the grid
-function clearGrid() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawGrid();
-}
-
-// Export all needed elements and functions
 export {
     initCanvas,
     resizeCanvas,
@@ -111,5 +113,6 @@ export {
     feedbackOverlay,
     timerDisplay,
     hideCanvas,
-    showCanvas
+    showCanvas,
+    showFeedback,
 };

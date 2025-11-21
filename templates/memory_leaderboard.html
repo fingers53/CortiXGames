@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,10 +17,11 @@
         }
 
         .container {
-            max-width: 600px;
-            width: 100%;
+            width: 90vw;
+            max-width: 1000px;
             text-align: center;
         }
+
 
         h1 {
             font-size: 2em;
@@ -36,24 +38,29 @@
             padding: 20px;
             border-radius: 8px;
             text-align: center;
+            overflow-x: auto;
+            /* allow scroll instead of breaking layout */
         }
+
+
 
         .leaderboard-table {
             width: 100%;
+            min-width: 600px;
+            /* force a sensible layout */
             margin: 10px 0;
             border-collapse: collapse;
+            table-layout: fixed;
+            /* columns share width evenly */
         }
 
-        .leaderboard-table th, .leaderboard-table td {
-            padding: 12px;
+
+        .leaderboard-table th,
+        .leaderboard-table td {
+            padding: 8px;
             border: 2px solid #6699cc;
             background-color: #f0f8ff;
-        }
-
-        .leaderboard-table th {
-            background-color: #6699cc;
-            color: #ffffff;
-            font-weight: bold;
+            font-size: 0.9em;
         }
 
         .game-button {
@@ -70,14 +77,21 @@
         .game-button:hover {
             background-color: #2b5b8a;
         }
+
+        .current-user {
+            background-color: rgba(255, 255, 0, 0.15);
+            font-weight: bold;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>Memory Game Leaderboard</h1>
         <div id="memory-leaderboard" class="end-screen">
             <p>Loading memory game scores...</p>
         </div>
+        <p id="memory-last-updated"></p>
         <button onclick="window.location.href='/'" class="game-button">Home</button>
     </div>
 
@@ -87,6 +101,7 @@
                 const response = await fetch('/api/leaderboard/memory-game');
                 const data = await response.json();
                 const scores = data.scores.slice(0, 100); // Limit to 100 scores
+                const currentUsername = localStorage.getItem('username') || null;
 
                 const leaderboardContainer = document.getElementById('memory-leaderboard');
                 leaderboardContainer.innerHTML = ''; // Clear loading message
@@ -98,25 +113,61 @@
                 const header = document.createElement('tr');
                 header.innerHTML = `
                     <th>Rank</th>
+                    <th>Flag</th>
                     <th>Username</th>
-                    <th>Score</th>
-                    <th>Avg Reaction Time (ms)</th>
+                    <th>Total Score</th>
+                    <th>Round 1</th>
+                    <th>Round 2</th>
+                    <th>Round 3</th>
                 `;
                 table.appendChild(header);
 
+                const MEDAL_EMOJIS = [
+                    "",              // index 0 (no medal)
+                    "\u{1F947}",     // 🥇 gold
+                    "\u{1F948}",     // 🥈 silver
+                    "\u{1F949}"      // 🥉 bronze
+                ];
+
                 // Table rows for scores
                 scores.forEach((score, index) => {
+                    const username = score[0];
+                    const countryCode = score[1] || '';
+                    const totalScore = Number(score[2] ?? 0);
+                    const r1 = Number(score[3] ?? 0);
+                    const r2 = Number(score[4] ?? 0);
+                    const r3 = Number(score[5] ?? 0);
+
+                    let medal = "";
+                    if (index === 0) medal = MEDAL_EMOJIS[1];
+                    else if (index === 1) medal = MEDAL_EMOJIS[2];
+                    else if (index === 2) medal = MEDAL_EMOJIS[3];
+
+                    const displayName = medal ? `${medal} ${username}` : username;
+
                     const row = document.createElement('tr');
+                    if (currentUsername && username === currentUsername) {
+                        row.classList.add('current-user');
+                    }
+
                     row.innerHTML = `
                         <td>${index + 1}</td>
-                        <td>${score[0]}</td>
-                        <td>${score[1]}</td>
-                        <td>${score[2].toFixed(2)}</td>
+                        <td>${countryCode}</td>
+                        <td>${displayName}</td>
+                        <td>${totalScore.toFixed(2)}</td>
+                        <td>${r1.toFixed(2)}</td>
+                        <td>${r2.toFixed(2)}</td>
+                        <td>${r3.toFixed(2)}</td>
                     `;
                     table.appendChild(row);
                 });
 
                 leaderboardContainer.appendChild(table);
+
+                const updatedElem = document.getElementById('memory-last-updated');
+                if (updatedElem && data.last_updated) {
+                    updatedElem.textContent = `Last updated: ${data.last_updated}`;
+                }
             } catch (error) {
                 console.error('Error loading leaderboard data:', error);
                 document.getElementById('memory-leaderboard').innerHTML = '<p>Failed to load leaderboard data.</p>';
@@ -126,4 +177,5 @@
         window.onload = loadLeaderboard;
     </script>
 </body>
+
 </html>

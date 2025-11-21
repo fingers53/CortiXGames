@@ -1,120 +1,108 @@
+/**
+ * Round 1: Player memorizes a pattern of dots and recreates it on the grid.
+ * Uses shared helpers from gameFlow.js and reports per-question results to
+ * memory_game.js via logMemoryQuestion.
+ */
+
 import {
     clearGrid,
     showIntro,
     hideIntro,
+    startTimer,
     stopTimer,
     hideCanvas,
     showCanvas,
     canvas,
     ctx,
-    feedbackOverlay,
-    timerDisplay,
+    showFeedback,
 } from './gameFlow.js';
+import { logMemoryQuestion } from './memory_game.js';
 
 const gridSize = 5;
+const roundLength = 30;
+
 let currentPattern = [];
 let userPattern = [];
-let questionCount = 0;
+let questionIndex = 0;
 let sequenceLength = 5;
-const roundLength = 30;//30;
 let canClick = false;
 let isRoundActive = false;
+let attemptsForQuestion = 0;
 
 function handleCanvasClick(event) {
     if (!canClick) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = Math.floor((event.clientX - rect.left) / (canvas.width / 5));
-    const y = Math.floor((event.clientY - rect.top) / (canvas.height / 5));
+    const x = Math.floor((event.clientX - rect.left) / (canvas.width / gridSize));
+    const y = Math.floor((event.clientY - rect.top) / (canvas.height / gridSize));
     handlePatternClick(x, y);
 }
 
-// Initialize Round 1
-export function initRound1(callback) {
+export function initRound1(onRoundComplete) {
+    resetState();
     clearGrid();
     showCanvas();
 
-    // Attach the event listener
     canvas.addEventListener("click", handleCanvasClick);
 
     showIntro("Get Ready for Round 1! Memorize the pattern and replicate it.");
     setTimeout(() => {
         hideIntro();
-        startRound(callback);
+        startRound(onRoundComplete);
     }, 2000);
 }
 
-
-function startRound(callback) {
-    console.log("Starting Round 2");
-    questionCount = 0;
+function resetState() {
+    currentPattern = [];
+    userPattern = [];
+    questionIndex = 0;
     sequenceLength = 5;
     canClick = false;
-    isRoundActive = true; // Set the round as active
-
-    startRoundTimer(callback);
-    if (isRoundActive) {
-        nextQuestion();
-    }
+    isRoundActive = false;
+    attemptsForQuestion = 0;
 }
 
-function startRoundTimer(callback) {
-    let gameTime = roundLength;
-    timerDisplay.textContent = `Time Left: ${gameTime}s`;
-    timerDisplay.style.display = "block";
-
-    const roundTimer = setInterval(() => {
-        gameTime--;
-        timerDisplay.textContent = `Time Left: ${gameTime}s`;
-
-        if (gameTime <= 0) {
-            clearInterval(roundTimer);
-            timerDisplay.style.display = "none";
-            canClick = false;
-            isRoundActive = false; // Set the round as inactive
-            showFeedback("Time's Up!", false);
-            setTimeout(() => endRound(callback), 1200);
-        }
-    }, 1000);
+function startRound(onRoundComplete) {
+    isRoundActive = true;
+    startTimer(roundLength, () => handleTimeOut(onRoundComplete));
+    nextQuestion();
 }
-function endRound(callback) {
-    console.log("Ending Round 1");
 
-    // Stop the timer and clear the canvas
+function endRound(onRoundComplete) {
+    isRoundActive = false;
     stopTimer();
+    canClick = false;
+    canvas.removeEventListener("click", handleCanvasClick);
     hideCanvas();
     clearGrid();
-
-    // Remove the click event listener
-    canvas.removeEventListener("click", handleCanvasClick);
-    console.log('End of Round 1');
-
-    // Proceed to the next round after a short delay
-    setTimeout(callback, 1000); // Pass to memory_game.js
+    setTimeout(onRoundComplete, 500);
 }
 
+function handleTimeOut(onRoundComplete) {
+    canClick = false;
+    isRoundActive = false;
+    showFeedback("Time's Up!", false, 800, () => endRound(onRoundComplete));
+}
 
-
-// Generate and display the pattern
 function nextQuestion() {
+    if (!isRoundActive) return;
+
+    attemptsForQuestion = 0;
     userPattern = [];
-    generatePattern(sequenceLength);
-    displayPattern();
+    questionIndex += 1;
 
-    // Add distractions with a 65% chance after the fourth question
-    if (questionCount >= 4 && Math.random() < 0.65) {
-        addDistractions();
-    }
-
-    // Increment sequence length every 3 questions
-    if (questionCount > 0 && questionCount % 3 === 0) {
+    if (questionIndex > 1 && (questionIndex - 1) % 3 === 0) {
         sequenceLength = Math.min(sequenceLength + 1, 22);
     }
 
-    questionCount++;
+    generatePattern(sequenceLength);
+    if (questionIndex > 4 && Math.random() < 0.65) {
+        addDistractions();
+    }
+
+    displayPattern();
 }
 
-// Generate a random pattern with a given length
 function generatePattern(length) {
     currentPattern = [];
     while (currentPattern.length < length) {
@@ -126,7 +114,6 @@ function generatePattern(length) {
     }
 }
 
-// Display the pattern briefly, then enable user input
 function displayPattern() {
     clearGrid();
     currentPattern.forEach(([x, y]) => drawDot(x, y, "blue"));
@@ -137,7 +124,6 @@ function displayPattern() {
     }, 500);
 }
 
-// Check if the user clicked correctly
 function handlePatternClick(x, y) {
     const isCorrectClick = currentPattern.some(([px, py]) => px === x && py === y);
 
@@ -152,39 +138,43 @@ function handlePatternClick(x, y) {
         );
 
         if (isPatternComplete) {
-            showFeedback("Correct!", true);
+            attemptsForQuestion += 1;
             canClick = false;
-            setTimeout(nextQuestion, 1000);
+            logMemoryQuestion({
+                round: 1,
+                questionIndex,
+                wasCorrect: true,
+                attempts: attemptsForQuestion,
+                sequenceLength,
+            });
+            showFeedback("Correct!", true, 800, () => {
+                clearGrid();
+                setTimeout(nextQuestion, 400);
+            });
         }
     } else {
-        showFeedback("Incorrect! Here is the correct pattern:", false);
+        attemptsForQuestion += 1;
+        canClick = false;
+        revealCorrectPattern();
+        logMemoryQuestion({
+            round: 1,
+            questionIndex,
+            wasCorrect: false,
+            attempts: attemptsForQuestion,
+            sequenceLength,
+        });
+        showFeedback("Incorrect! Here is the correct pattern:", false, 800, () => {
+            clearGrid();
+            setTimeout(nextQuestion, 400);
+        });
     }
 }
 
-// Show feedback and display the correct pattern briefly
-function showFeedback(message, isCorrect) {
-    canClick = false;
-    feedbackOverlay.textContent = message;
-    feedbackOverlay.style.display = "block";
-    feedbackOverlay.style.color = isCorrect ? "green" : "red";
-    feedbackOverlay.style.fontSize = "2em";
-
+function revealCorrectPattern() {
     clearGrid();
-
-    // Show correct pattern in green if the answer was incorrect
-    if (!isCorrect) {
-        currentPattern.forEach(([x, y]) => drawDot(x, y, "green"));
-    }
-
-    setTimeout(() => {
-        feedbackOverlay.style.display = "none";
-        clearGrid();
-        // Move to the next question if the answer was incorrect
-        if (!isCorrect) setTimeout(nextQuestion, 1000);
-    }, 800);
+    currentPattern.forEach(([x, y]) => drawDot(x, y, "green"));
 }
 
-// Draw a dot on the canvas
 function drawDot(x, y, color = "blue") {
     const cellSize = canvas.width / gridSize;
     ctx.beginPath();
@@ -194,10 +184,7 @@ function drawDot(x, y, color = "blue") {
 }
 
 function addDistractions() {
-    // Set the maximum number of distractions based on the number of questions answered
-    const maxDistractions = Math.min(5, 2 + Math.floor(questionCount / 3));
-    
-    // Set the distraction count with a higher chance for more distractions as question count increases
+    const maxDistractions = Math.min(5, 2 + Math.floor(questionIndex / 3));
     const distractionCount = Math.max(2, Math.floor(Math.random() * maxDistractions));
 
     const distractions = [];

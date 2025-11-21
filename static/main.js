@@ -1,48 +1,109 @@
-// Function to generate a random 5-digit username as placeholder
-function setRandomPlaceholder() {
-    const usernameInput = document.getElementById("username");
-    const randomNum = Math.floor(10000 + Math.random() * 90000);
-    usernameInput.placeholder = `user_${randomNum}`;
+/**
+ * Landing page utilities for username handling and navigation.
+ * Provides validation for usernames and gates game navigation on a saved username
+ * stored in localStorage under the "username" key.
+ */
+
+const USERNAME_KEY = "username";
+const bestReaction = document.getElementById("best-reaction");
+const bestMemory = document.getElementById("best-memory");
+
+function validateUsername(name) {
+    const usernameRegex = /^[A-Za-z0-9_]{3,20}$/;
+    return usernameRegex.test(name);
 }
 
-// Function to confirm and save the username
 function confirmUsername() {
     const usernameInput = document.getElementById("username");
     const enterButton = document.getElementById("enter-button");
-    const username = usernameInput.value.trim() || usernameInput.placeholder;
+    if (!usernameInput) return;
 
-    // Check if username is already in use
-    const usernames = JSON.parse(localStorage.getItem("usernames")) || [];
-    if (usernames.includes(username)) {
-        alert("Username is already taken. Please choose another one.");
+    const chosen = usernameInput.value.trim();
+    if (!validateUsername(chosen)) {
+        alert("Please choose a username (3–20 letters, digits, underscore).");
         return;
     }
 
-    // Save the username in localStorage
-    usernames.push(username);
-    localStorage.setItem("usernames", JSON.stringify(usernames));
-    localStorage.setItem("username", username);  // Save for this user's session
-
-    // Style changes after confirmation
-    usernameInput.value = username;
+    localStorage.setItem(USERNAME_KEY, chosen);
+    usernameInput.value = chosen;
     usernameInput.disabled = true;
     usernameInput.style.backgroundColor = "#f0f0f0";
     usernameInput.style.color = "#555";
-    enterButton.style.display = "none";
+
+    if (enterButton) {
+        enterButton.style.display = "none";
+    }
+
+    fetchBestScores();
 }
 
-// Set random placeholder on page load
-window.onload = function () {
-    setRandomPlaceholder();
+function getSavedUsername() {
+    return localStorage.getItem(USERNAME_KEY);
+}
 
-    // If a username is already set in localStorage, disable the input
-    const savedUsername = localStorage.getItem("username");
+function ensureUsernameOrAlert() {
+    const saved = getSavedUsername();
+    if (!validateUsername(saved || "")) {
+        alert("Please choose a valid username first.");
+        return false;
+    }
+    return true;
+}
+
+function attachNavigation(buttonId, path) {
+    const button = document.getElementById(buttonId);
+    if (!button) return;
+    button.addEventListener("click", () => {
+        if (ensureUsernameOrAlert()) {
+            window.location.href = path;
+        }
+    });
+}
+
+function hydrateUsernameField() {
+    const usernameInput = document.getElementById("username");
+    const enterButton = document.getElementById("enter-button");
+    const savedUsername = getSavedUsername();
+
+    if (!usernameInput) return;
+
     if (savedUsername) {
-        const usernameInput = document.getElementById("username");
         usernameInput.value = savedUsername;
         usernameInput.disabled = true;
         usernameInput.style.backgroundColor = "#f0f0f0";
         usernameInput.style.color = "#555";
-        document.getElementById("enter-button").style.display = "none";
+        if (enterButton) {
+            enterButton.style.display = "none";
+        }
     }
-};
+}
+
+function renderBestScores(reactionBest, memoryBest) {
+    if (bestReaction) {
+        bestReaction.textContent = `Best Reaction: ${reactionBest ?? "–"}`;
+    }
+    if (bestMemory) {
+        bestMemory.textContent = `Best Memory: ${memoryBest ?? "–"}`;
+    }
+}
+
+function fetchBestScores() {
+    const username = getSavedUsername();
+    if (!validateUsername(username || "")) return;
+
+    fetch(`/api/my-best-scores?username=${encodeURIComponent(username)}`)
+        .then((res) => res.json())
+        .then((data) => {
+            renderBestScores(data.reaction_best, data.memory_best);
+        })
+        .catch((err) => console.error("Failed to fetch best scores:", err));
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+    hydrateUsernameField();
+    fetchBestScores();
+    attachNavigation("memory-button", "/memory-game");
+    attachNavigation("reaction-button", "/reaction-game");
+});
+
+window.confirmUsername = confirmUsername;

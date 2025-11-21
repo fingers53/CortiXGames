@@ -1,30 +1,37 @@
+/**
+ * Round 3: Identify the rotated triangle among blue triangles while ignoring orange decoys.
+ * Relies on shared canvas/timer helpers and logs each question outcome for the orchestrator.
+ */
+
 import {
     drawGrid,
     clearGrid,
     showIntro,
     hideIntro,
+    startTimer,
     stopTimer,
     hideCanvas,
     showCanvas,
     canvas,
     ctx,
-    feedbackOverlay,
-    timerDisplay,
+    showFeedback,
 } from './gameFlow.js';
-
+import { logMemoryQuestion } from './memory_game.js';
 
 const gridSize = 5;
-let currentPattern = [];
-let rotatedTriangle = null;
-let questionCount = 0;
-let triangleCount = 6;
-let canClick = false;
 const roundLength = 20;
 const initialRotationAngles = [45, 135, 225, 315];
 const extraRotationAngles = [90, 180, 270];
-let dummyTriangleCount = 3;
+const dummyTriangleCount = 3;
 
-// Attach the click handler
+let currentPattern = [];
+let rotatedTriangle = null;
+let questionIndex = 0;
+let triangleCount = 6;
+let canClick = false;
+let attemptsForQuestion = 0;
+let isRoundActive = false;
+
 function handleCanvasClick(event) {
     if (!canClick) return;
 
@@ -34,64 +41,58 @@ function handleCanvasClick(event) {
     handleTriangleClick(x, y);
 }
 
-// Initialize Round 3
-export function initRound3(callback) {
+export function initRound3(onRoundComplete) {
+    resetState();
     clearGrid();
     showCanvas();
 
-    // Attach the event listener
     canvas.addEventListener("click", handleCanvasClick);
 
     showIntro("Round 3: Find and click the rotated triangle. Ignore the orange triangles.");
     setTimeout(() => {
         hideIntro();
-        startRound(callback);
+        startRound(onRoundComplete);
     }, 2000);
 }
 
-// Start the round and timer
-function startRound(callback) {
-    questionCount = 0;
+function resetState() {
+    currentPattern = [];
+    rotatedTriangle = null;
+    questionIndex = 0;
     triangleCount = 6;
     canClick = false;
-    startRoundTimer(callback);
+    attemptsForQuestion = 0;
+    isRoundActive = false;
+}
+
+function startRound(onRoundComplete) {
+    isRoundActive = true;
+    startTimer(roundLength, () => handleTimeOut(onRoundComplete));
     displayInitialTriangles();
 }
 
-// Start the round timer
-function startRoundTimer(callback) {
-    let gameTime = roundLength;
-    timerDisplay.textContent = `Time Left: ${gameTime}s`;
-    timerDisplay.style.display = "block";
-
-    const roundTimer = setInterval(() => {
-        gameTime--;
-        timerDisplay.textContent = `Time Left: ${gameTime}s`;
-
-        if (gameTime <= 0) {
-            clearInterval(roundTimer);
-            timerDisplay.style.display = "none";
-            canClick = false;
-            showFeedback("Time's Up!", false, () => endRound(callback));
-        }
-    }, 1000);
-}
-
-// End the round
-function endRound(callback) {
+function endRound(onRoundComplete) {
+    isRoundActive = false;
     stopTimer();
+    canClick = false;
+    canvas.removeEventListener("click", handleCanvasClick);
     hideCanvas();
     clearGrid();
-
-    // Remove the click event listener
-    canvas.removeEventListener("click", handleCanvasClick);
-
-    // Proceed to the next round
-    setTimeout(callback, 1000);
+    setTimeout(onRoundComplete, 500);
 }
 
-// Display the initial triangles
+function handleTimeOut(onRoundComplete) {
+    canClick = false;
+    isRoundActive = false;
+    showFeedback("Time's Up!", false, 800, () => endRound(onRoundComplete));
+}
+
 function displayInitialTriangles() {
+    if (!isRoundActive) return;
+
+    attemptsForQuestion = 0;
+    questionIndex += 1;
+
     clearGrid();
     drawGrid();
 
@@ -106,7 +107,6 @@ function displayInitialTriangles() {
 
     addDummyTriangles();
 
-    // Hide triangles briefly, then show with one rotated
     setTimeout(() => {
         clearGrid();
         drawGrid();
@@ -114,12 +114,8 @@ function displayInitialTriangles() {
     }, 1000);
 }
 
-// Redisplay triangles with one rotated
 function displayWithRotatedTriangle() {
-    if (currentPattern.length === 0) {
-        console.error("Error: currentPattern is empty.");
-        return;
-    }
+    if (currentPattern.length === 0) return;
 
     clearGrid();
     drawGrid();
@@ -139,7 +135,6 @@ function displayWithRotatedTriangle() {
     canClick = true;
 }
 
-// Add dummy triangles
 function addDummyTriangles() {
     const dummyPositions = generateUniquePositions(
         dummyTriangleCount,
@@ -152,39 +147,43 @@ function addDummyTriangles() {
     });
 }
 
-// Handle user clicks
 function handleTriangleClick(x, y) {
-    if (x === rotatedTriangle[0] && y === rotatedTriangle[1]) {
-        showFeedback("Correct!", true, displayInitialTriangles);
-    } else {
-        showFeedback("Incorrect!", false, displayInitialTriangles);
-    }
-}
+    if (!rotatedTriangle) return;
 
-// Show feedback and optionally proceed to the next question
-function showFeedback(message, isCorrect, callback) {
+    const isCorrect = x === rotatedTriangle[0] && y === rotatedTriangle[1];
+    attemptsForQuestion += 1;
     canClick = false;
-    feedbackOverlay.textContent = message;
-    feedbackOverlay.style.display = "block";
-    feedbackOverlay.style.color = isCorrect ? "green" : "red";
-    feedbackOverlay.style.fontSize = "2em";
 
-    clearGrid();
+    logMemoryQuestion({
+        round: 3,
+        questionIndex,
+        wasCorrect: isCorrect,
+        attempts: attemptsForQuestion,
+        sequenceLength: triangleCount,
+    });
 
-    // Ensure rotatedTriangle is valid before trying to draw it
-    if (!isCorrect && rotatedTriangle) {
-        drawTriangle(rotatedTriangle[0], rotatedTriangle[1], rotatedTriangle[2], "green");
+    if (isCorrect) {
+        showFeedback("Correct!", true, 800, () => {
+            clearGrid();
+            setTimeout(displayInitialTriangles, 400);
+        });
+    } else {
+        showRotatedTriangle();
+        showFeedback("Incorrect!", false, 800, () => {
+            clearGrid();
+            setTimeout(displayInitialTriangles, 400);
+        });
     }
-
-    setTimeout(() => {
-        feedbackOverlay.style.display = "none";
-        clearGrid();
-        if (callback) setTimeout(callback, 1000);
-    }, 800);
 }
 
+function showRotatedTriangle() {
+    clearGrid();
+    if (rotatedTriangle) {
+        const [x, y, rotation] = rotatedTriangle;
+        drawTriangle(x, y, rotation, "green");
+    }
+}
 
-// Utility: Generate unique positions
 function generateUniquePositions(count, excludePositions) {
     const positions = [];
     while (positions.length < count) {
@@ -200,12 +199,10 @@ function generateUniquePositions(count, excludePositions) {
     return positions;
 }
 
-// Utility: Get a random element from an array
 function getRandomElement(array) {
     return array[Math.floor(Math.random() * array.length)];
 }
 
-// Draw a triangle
 function drawTriangle(x, y, rotation = 0, color = "blue") {
     const cellSize = canvas.width / gridSize;
     const cx = x * cellSize + cellSize / 2;

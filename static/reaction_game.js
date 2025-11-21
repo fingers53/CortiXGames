@@ -31,8 +31,24 @@ let middleBallShown = false;
 let lockInput = false;
 let sessionToken = null; // Reserved for future secure scoring
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+const usernameRegex = /^[A-Za-z0-9_]{3,20}$/;
+
+function getUsername() {
+    return localStorage.getItem("username") || "";
+}
+
+function ensureUsername() {
+    const saved = getUsername();
+    if (!usernameRegex.test(saved)) {
+        alert("Please choose a valid username first.");
+        window.location.href = "/";
+        return false;
+    }
+    return true;
+}
 
 function startCountdown() {
+    if (!ensureUsername()) return;
     let countdownValue = 3;
     const countdownDisplay = document.getElementById("countdown");
 
@@ -183,7 +199,7 @@ async function showEndScreen() {
         answerRecord
     };
 
-    const username = localStorage.getItem("username") || "anonymous";
+    const username = getUsername();
 
     fetch("/reaction-game/submit_score", {
         method: "POST",

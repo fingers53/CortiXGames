@@ -2,7 +2,7 @@ import re
 import secrets
 import sqlite3
 from datetime import datetime
-from typing import List, Dict
+from typing import Dict, List
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -29,29 +29,29 @@ def assert_valid_username(username: str):
         raise HTTPException(status_code=400, detail="Invalid username")
 
 
-def get_country_code(client_ip: str) -> str:
+def get_country_code_from_ip(client_ip: str | None) -> str:
     """Placeholder geo lookup."""
-    return "unknown"
+    return "??" if not client_ip else "??"
 
 
 def get_or_create_user(conn: sqlite3.Connection, username: str, country_code: str | None) -> int:
     assert_valid_username(username)
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+    cursor.execute("SELECT id, country_code FROM users WHERE username = ?", (username,))
     row = cursor.fetchone()
     if row:
-        user_id = row[0]
-        if country_code:
+        user_id, existing_country = row
+        if country_code and country_code != existing_country:
             cursor.execute(
-                "UPDATE users SET last_country = ? WHERE id = ?",
+                "UPDATE users SET country_code = ? WHERE id = ?",
                 (country_code, user_id),
             )
         return user_id
 
-    created_at = datetime.utcnow().isoformat()
+    created_country = country_code or "??"
     cursor.execute(
-        "INSERT INTO users (username, created_at, last_country) VALUES (?, ?, ?)",
-        (username, created_at, country_code),
+        "INSERT INTO users (username, country_code) VALUES (?, ?)",
+        (username, created_country),
     )
     return cursor.lastrowid
 
@@ -103,21 +103,31 @@ def validate_answer_record(answer_record: List[Dict]):
             raise HTTPException(status_code=422, detail="Each answer must include correctness")
 
 
-def compute_memory_score(question_log: List[Dict]) -> int:
-    """
-    Simple server-side memory scoring rule:
+def compute_memory_scores(question_log: List[Dict]) -> tuple[float, float, float, float]:
+    """Compute per-round scores and a total for the memory game.
+
+    Scoring rule:
     +2 for correct on first attempt, +1 for correct with retries, -1 for incorrect.
+    Scores can go negative.
     """
 
-    score = 0
+    round_scores = {1: 0.0, 2: 0.0, 3: 0.0}
     for entry in question_log:
-        was_correct = entry.get("wasCorrect")
-        attempts = entry.get("attempts", 0)
+        round_num = int(entry.get("round", 0))
+        if round_num not in round_scores:
+            continue
+        was_correct = bool(entry.get("wasCorrect", False))
+        attempts = int(entry.get("attempts", 1))
         if was_correct:
-            score += 2 if attempts == 1 else 1
+            round_scores[round_num] += 2.0 if attempts == 1 else 1.0
         else:
-            score -= 1
-    return score
+            round_scores[round_num] -= 1.0
+
+    r1 = round_scores[1]
+    r2 = round_scores[2]
+    r3 = round_scores[3]
+    total = r1 + r2 + r3
+    return total, r1, r2, r3
 
 
 @app.on_event("startup")
@@ -159,6 +169,7 @@ async def memory_game_leaderboard(request: Request):
 async def submit_reaction_score(request: Request, _=Depends(csrf_protected)):
     data = await request.json()
     username = data.get("username")
+    country_input = data.get("country") or data.get("countryCode")
     score_data = data.get("scoreData") or {}
     answer_record = score_data.get("answerRecord") or []
 
@@ -166,7 +177,12 @@ async def submit_reaction_score(request: Request, _=Depends(csrf_protected)):
     validate_answer_record(answer_record)
 
     score_result = calculate_reaction_game_score(answer_record)
-    country_code = get_country_code(request.client.host)
+    country_code = country_input or get_country_code_from_ip(request.client.host)
+    final_score = score_result["finalScore"]
+    average_time_ms = score_result["averageTime"]
+    fastest_time_ms = score_result["fastestTime"]
+    slowest_time_ms = score_result["slowestTime"]
+    accuracy = score_result["accuracy"]
 
     conn = sqlite3.connect("scores.sqlite3")
     try:
@@ -176,17 +192,17 @@ async def submit_reaction_score(request: Request, _=Depends(csrf_protected)):
         cursor.execute(
             """
             INSERT INTO reaction_scores (
-                user_id, final_score, average_time_ms, fastest_time_ms,
+                user_id, score, average_time_ms, fastest_time_ms,
                 slowest_time_ms, accuracy, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 user_id,
-                score_result["finalScore"],
-                score_result["averageTime"],
-                score_result["fastestTime"],
-                score_result["slowestTime"],
-                score_result["accuracy"],
+                final_score,
+                average_time_ms,
+                fastest_time_ms,
+                slowest_time_ms,
+                accuracy,
                 created_at,
             ),
         )
@@ -201,6 +217,7 @@ async def submit_reaction_score(request: Request, _=Depends(csrf_protected)):
 async def submit_memory_score(request: Request, _=Depends(csrf_protected)):
     data = await request.json()
     username = data.get("username")
+    country_input = data.get("country") or data.get("countryCode")
     question_log = data.get("questionLog") or []
 
     assert_valid_username(username)
@@ -224,8 +241,8 @@ async def submit_memory_score(request: Request, _=Depends(csrf_protected)):
         if was_correct not in (True, False):
             raise HTTPException(status_code=422, detail="Each question must include correctness")
 
-    final_score = compute_memory_score(question_log)
-    country_code = get_country_code(request.client.host)
+    total_score, r1, r2, r3 = compute_memory_scores(question_log)
+    country_code = country_input or get_country_code_from_ip(request.client.host)
 
     conn = sqlite3.connect("scores.sqlite3")
     try:
@@ -233,14 +250,26 @@ async def submit_memory_score(request: Request, _=Depends(csrf_protected)):
         created_at = datetime.utcnow().isoformat()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO memory_scores (user_id, score, created_at) VALUES (?, ?, ?)",
-            (user_id, final_score, created_at),
+            """
+            INSERT INTO memory_scores (
+                user_id, total_score, round1_score, round2_score, round3_score, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (user_id, total_score, r1, r2, r3, created_at),
         )
         conn.commit()
     finally:
         conn.close()
 
-    return JSONResponse(content={"status": "success", "finalScore": final_score})
+    return JSONResponse(
+        content={
+            "status": "success",
+            "finalScore": total_score,
+            "round1Score": r1,
+            "round2Score": r2,
+            "round3Score": r3,
+        }
+    )
 
 
 @app.get("/api/leaderboard/reaction-game")
@@ -250,15 +279,23 @@ async def reaction_leaderboard_api():
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT u.username, MAX(r.final_score) AS best_score, AVG(r.average_time_ms) AS avg_time
+            SELECT
+                u.username,
+                u.country_code,
+                MAX(r.score) AS best_score,
+                AVG(r.average_time_ms) AS avg_time,
+                MAX(r.created_at) AS last_played
             FROM reaction_scores r
             JOIN users u ON u.id = r.user_id
-            GROUP BY u.username
+            GROUP BY u.username, u.country_code
             ORDER BY best_score DESC
             """
         )
         scores = cursor.fetchall()
-        return JSONResponse(content={"scores": scores})
+        cursor.execute("SELECT MAX(created_at) FROM reaction_scores")
+        last_updated_row = cursor.fetchone()
+        last_updated = last_updated_row[0][:10] if last_updated_row and last_updated_row[0] else None
+        return JSONResponse(content={"scores": scores, "last_updated": last_updated})
     finally:
         conn.close()
 
@@ -270,15 +307,25 @@ async def memory_leaderboard_api():
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT u.username, MAX(m.score) AS best_score, 0.0 as placeholder
+            SELECT
+                u.username,
+                u.country_code,
+                MAX(m.total_score) AS best_total,
+                MAX(m.round1_score) AS best_r1,
+                MAX(m.round2_score) AS best_r2,
+                MAX(m.round3_score) AS best_r3,
+                MAX(m.created_at) AS last_played
             FROM memory_scores m
             JOIN users u ON u.id = m.user_id
-            GROUP BY u.username
-            ORDER BY best_score DESC
+            GROUP BY u.username, u.country_code
+            ORDER BY best_total DESC
             """
         )
         scores = cursor.fetchall()
-        return JSONResponse(content={"scores": scores})
+        cursor.execute("SELECT MAX(created_at) FROM memory_scores")
+        last_updated_row = cursor.fetchone()
+        last_updated = last_updated_row[0][:10] if last_updated_row and last_updated_row[0] else None
+        return JSONResponse(content={"scores": scores, "last_updated": last_updated})
     finally:
         conn.close()
 
@@ -296,9 +343,9 @@ async def my_best_scores(username: str):
             return {"username": username, "reaction_best": None, "memory_best": None}
 
         user_id = row[0]
-        cursor.execute("SELECT MAX(final_score) FROM reaction_scores WHERE user_id = ?", (user_id,))
+        cursor.execute("SELECT MAX(score) FROM reaction_scores WHERE user_id = ?", (user_id,))
         reaction_best = cursor.fetchone()[0]
-        cursor.execute("SELECT MAX(score) FROM memory_scores WHERE user_id = ?", (user_id,))
+        cursor.execute("SELECT MAX(total_score) FROM memory_scores WHERE user_id = ?", (user_id,))
         memory_best = cursor.fetchone()[0]
         return {
             "username": username,

@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import Dict, List
 
 
 def calculate_reaction_game_score(answer_record: List[Dict]):
@@ -33,7 +33,7 @@ def calculate_reaction_game_score(answer_record: List[Dict]):
         "streakPenalty": round(streak_penalty, 2),
         "fastestTime": round(fastest_time, 2),
         "slowestTime": round(slowest_time, 2),
-        "penaltyMessage": "Penalized for a streak of incorrect answers." if streak_penalty > 0 else "Great job! No penalty for consecutive incorrect answers."
+        "penaltyMessage": "Penalized for a streak of incorrect answers." if streak_penalty > 0 else "Great job! No penalty for consecutive incorrect answers.",
     }
 
 

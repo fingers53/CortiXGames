@@ -11,6 +11,7 @@ import { initRound3 } from './round3.js';
 
 export const questionLog = [];
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+const usernameRegex = /^[A-Za-z0-9_]{3,20}$/;
 
 export function logMemoryQuestion(event) {
     questionLog.push(event);
@@ -18,7 +19,7 @@ export function logMemoryQuestion(event) {
 
 export function endMemoryGame() {
     hideCanvas();
-    const username = localStorage.getItem("username") || "anonymous";
+    const username = localStorage.getItem("username") || "";
 
     fetch("/memory-game/submit_score", {
         method: "POST",
@@ -44,6 +45,12 @@ export function endMemoryGame() {
 }
 
 export function startMemoryGame() {
+    const saved = localStorage.getItem("username") || "";
+    if (!usernameRegex.test(saved)) {
+        alert("Please choose a valid username first.");
+        window.location.href = "/";
+        return;
+    }
     questionLog.length = 0;
     initCanvas();
     initRound1(() => initRound2(() => initRound3(() => endMemoryGame())));

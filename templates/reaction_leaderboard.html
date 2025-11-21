@@ -66,6 +66,11 @@
         .game-button:hover {
             background-color: #45a049;
         }
+
+        .current-user {
+            background-color: rgba(255, 255, 0, 0.15);
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -74,6 +79,7 @@
         <div id="reaction-leaderboard" class="end-screen">
             <p>Loading reaction game scores...</p>
         </div>
+        <p id="reaction-last-updated"></p>
         <button onclick="window.location.href='/'" class="game-button">Home</button>
     </div>
 
@@ -83,6 +89,7 @@
                 const response = await fetch('/api/leaderboard/reaction-game');
                 const data = await response.json();
                 const scores = data.scores.slice(0, 100); // Limit to 100 scores
+                const currentUsername = localStorage.getItem('username') || null;
 
                 const leaderboardContainer = document.getElementById('reaction-leaderboard');
                 leaderboardContainer.innerHTML = ''; // Clear loading message
@@ -94,6 +101,8 @@
                 const header = document.createElement('tr');
                 header.innerHTML = `
                     <th>Rank</th>
+                    <th>Medal</th>
+                    <th>Flag</th>
                     <th>Username</th>
                     <th>Score</th>
                     <th>Avg Reaction Time (ms)</th>
@@ -102,17 +111,38 @@
 
                 // Table rows for scores
                 scores.forEach((score, index) => {
+                    const username = score[0];
+                    const countryCode = score[1] || '';
+                    const bestScore = Number(score[2] ?? 0);
+                    const avgTime = Number(score[3] ?? 0);
+
+                    let medal = '';
+                    if (index === 0) medal = '🥇';
+                    else if (index === 1) medal = '🥈';
+                    else if (index === 2) medal = '🥉';
+
                     const row = document.createElement('tr');
+                    if (currentUsername && username === currentUsername) {
+                        row.classList.add('current-user');
+                    }
+
                     row.innerHTML = `
                         <td>${index + 1}</td>
-                        <td>${score[0]}</td>
-                        <td>${score[1]}</td>
-                        <td>${score[2].toFixed(2)}</td>
+                        <td>${medal}</td>
+                        <td>${countryCode}</td>
+                        <td>${username}</td>
+                        <td>${bestScore.toFixed(2)}</td>
+                        <td>${avgTime.toFixed(2)}</td>
                     `;
                     table.appendChild(row);
                 });
 
                 leaderboardContainer.appendChild(table);
+
+                const updatedElem = document.getElementById('reaction-last-updated');
+                if (updatedElem && data.last_updated) {
+                    updatedElem.textContent = `Last updated: ${data.last_updated}`;
+                }
             } catch (error) {
                 console.error('Error loading leaderboard data:', error);
                 document.getElementById('reaction-leaderboard').innerHTML = '<p>Failed to load leaderboard data.</p>';

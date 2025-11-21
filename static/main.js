@@ -8,13 +8,6 @@ const USERNAME_KEY = "username";
 const bestReaction = document.getElementById("best-reaction");
 const bestMemory = document.getElementById("best-memory");
 
-function setRandomPlaceholder() {
-    const usernameInput = document.getElementById("username");
-    if (!usernameInput) return;
-    const randomNum = Math.floor(10000 + Math.random() * 90000);
-    usernameInput.placeholder = `user_${randomNum}`;
-}
-
 function validateUsername(name) {
     const usernameRegex = /^[A-Za-z0-9_]{3,20}$/;
     return usernameRegex.test(name);
@@ -25,9 +18,9 @@ function confirmUsername() {
     const enterButton = document.getElementById("enter-button");
     if (!usernameInput) return;
 
-    const chosen = usernameInput.value.trim() || usernameInput.placeholder || "";
+    const chosen = usernameInput.value.trim();
     if (!validateUsername(chosen)) {
-        alert("Invalid username");
+        alert("Please choose a username (3–20 letters, digits, underscore).");
         return;
     }
 
@@ -50,8 +43,8 @@ function getSavedUsername() {
 
 function ensureUsernameOrAlert() {
     const saved = getSavedUsername();
-    if (!saved) {
-        alert("Please enter a username before playing.");
+    if (!validateUsername(saved || "")) {
+        alert("Please choose a valid username first.");
         return false;
     }
     return true;
@@ -96,7 +89,7 @@ function renderBestScores(reactionBest, memoryBest) {
 
 function fetchBestScores() {
     const username = getSavedUsername();
-    if (!username) return;
+    if (!validateUsername(username || "")) return;
 
     fetch(`/api/my-best-scores?username=${encodeURIComponent(username)}`)
         .then((res) => res.json())
@@ -107,7 +100,6 @@ function fetchBestScores() {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-    setRandomPlaceholder();
     hydrateUsernameField();
     fetchBestScores();
     attachNavigation("memory-button", "/memory-game");

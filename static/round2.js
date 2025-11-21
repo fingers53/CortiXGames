@@ -46,11 +46,10 @@ export function initRound2(onRoundComplete) {
 
     canvas.addEventListener("click", handleCanvasClickRound2);
 
-    showIntro("Get Ready for Round 2! Watch the dots appear, then replicate the blue ones.");
-    setTimeout(() => {
+    showIntro("Get Ready for Round 2! Watch the dots appear, then replicate the blue ones.", () => {
         hideIntro();
         startRound(onRoundComplete);
-    }, 2000);
+    });
 }
 
 function resetState() {

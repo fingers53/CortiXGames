@@ -62,11 +62,13 @@ function showMemoryEndScreen(finalScore) {
     const timerDisplay = document.getElementById("timerDisplay");
     const introDisplay = document.getElementById("introDisplay");
     const feedbackOverlay = document.getElementById("feedbackOverlay");
+    const gameCanvas = document.getElementById("gameCanvas");
     const endScreen = document.getElementById("memoryEndScreen");
 
     if (timerDisplay) timerDisplay.style.display = "none";
     if (introDisplay) introDisplay.style.display = "none";
     if (feedbackOverlay) feedbackOverlay.style.display = "none";
+    if (gameCanvas) gameCanvas.style.display = "none";
     if (!endScreen) return;
 
     const scoreSection =

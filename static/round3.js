@@ -48,11 +48,10 @@ export function initRound3(onRoundComplete) {
 
     canvas.addEventListener("click", handleCanvasClick);
 
-    showIntro("Round 3: Find and click the rotated triangle. Ignore the orange triangles.");
-    setTimeout(() => {
+    showIntro("Round 3: Find and click the rotated triangle. Ignore the orange triangles.", () => {
         hideIntro();
         startRound(onRoundComplete);
-    }, 2000);
+    });
 }
 
 function resetState() {

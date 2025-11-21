@@ -32,6 +32,8 @@ let lockInput = false;
 let sessionToken = null; // Reserved for future secure scoring
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 const usernameRegex = /^[A-Za-z0-9_]{3,20}$/;
+const instructionBox = document.getElementById('reaction-instructions');
+const startButton = document.getElementById('start-game-btn');
 
 
 function getUsername() {
@@ -54,6 +56,7 @@ function startCountdown() {
     const countdownDisplay = document.getElementById("countdown");
 
     document.getElementById('end-screen').style.display = 'none';
+    if (instructionBox) instructionBox.style.display = 'none';
     countdownDisplay.style.display = 'block';
 
     countdownInterval = setInterval(() => {
@@ -102,9 +105,11 @@ function resetGame() {
     penaltyMessage = "";
 
     document.getElementById('timer').textContent = timer;
-    document.getElementById('game-container').style.display = 'none';
+    document.getElementById('game-container').style.display = 'block';
+    document.getElementById('countdown').style.display = 'none';
     clearInterval(countdown);
-    startCountdown();
+    clearTimeout(countdownInterval);
+    if (instructionBox) instructionBox.style.display = 'block';
 }
 
 function startNewRound() {
@@ -249,7 +254,16 @@ function chooseSideFromKeyboard(event) {
 }
 
 document.addEventListener("keydown", chooseSideFromKeyboard);
-window.onload = startCountdown;
+window.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('game-container').style.display = 'block';
+    document.getElementById('timer').textContent = timer;
+    document.getElementById('countdown').style.display = 'none';
+    document.getElementById('end-screen').style.display = 'none';
+    if (instructionBox) instructionBox.style.display = 'block';
+    if (startButton) {
+        startButton.addEventListener('click', startCountdown);
+    }
+});
 
 function computeLocalScore() {
     const averageTime = correctClicks > 0 ? totalReactionTime / correctClicks : 0;

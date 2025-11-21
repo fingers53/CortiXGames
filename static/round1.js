@@ -45,11 +45,10 @@ export function initRound1(onRoundComplete) {
 
     canvas.addEventListener("click", handleCanvasClick);
 
-    showIntro("Get Ready for Round 1! Memorize the pattern and replicate it.");
-    setTimeout(() => {
+    showIntro("Get Ready for Round 1! Memorize the pattern and replicate it.", () => {
         hideIntro();
         startRound(onRoundComplete);
-    }, 2000);
+    });
 }
 
 function resetState() {

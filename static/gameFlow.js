@@ -45,10 +45,20 @@ function clearGrid() {
     drawGrid();
 }
 
-function showIntro(message) {
-    introDisplay.innerHTML = `<h2>${message}</h2>`;
+function showIntro(message, onContinue) {
+    introDisplay.innerHTML = `<h2>${message}</h2>${onContinue ? '<button id="continueButton" class="overlay-button">Continue</button>' : ''}`;
     introDisplay.style.display = "block";
     timerDisplay.style.display = "none";
+
+    if (onContinue) {
+        const continueButton = document.getElementById("continueButton");
+        if (continueButton) {
+            continueButton.addEventListener("click", () => {
+                hideIntro();
+                onContinue();
+            });
+        }
+    }
 }
 
 function hideIntro() {
@@ -80,9 +90,11 @@ function stopTimer() {
 function hideCanvas() {
     clearGrid();
     canvas.style.visibility = "hidden";
+    canvas.style.display = "none";
 }
 
 function showCanvas() {
+    canvas.style.display = "block";
     canvas.style.visibility = "visible";
 }
 

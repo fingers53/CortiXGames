@@ -48,10 +48,29 @@ function ensureUsername() {
     return true;
 }
 
+function showInstructionBox() {
+    const instructionBox = document.getElementById('instruction-box');
+    const countdownDisplay = document.getElementById('countdown');
+
+    if (instructionBox) {
+        instructionBox.style.display = 'flex';
+    }
+
+    if (countdownDisplay) {
+        countdownDisplay.style.display = 'none';
+        countdownDisplay.textContent = '';
+    }
+
+    document.getElementById('game-container').style.display = 'block';
+}
+
 function startCountdown() {
     if (!ensureUsername()) return;
     let countdownValue = 3;
     const countdownDisplay = document.getElementById("countdown");
+
+    const instructionBox = document.getElementById('instruction-box');
+    if (instructionBox) instructionBox.style.display = 'none';
 
     document.getElementById('end-screen').style.display = 'none';
     countdownDisplay.style.display = 'block';
@@ -103,8 +122,9 @@ function resetGame() {
 
     document.getElementById('timer').textContent = timer;
     document.getElementById('game-container').style.display = 'none';
+    document.getElementById('end-screen').style.display = 'none';
     clearInterval(countdown);
-    startCountdown();
+    showInstructionBox();
 }
 
 function startNewRound() {
@@ -249,7 +269,14 @@ function chooseSideFromKeyboard(event) {
 }
 
 document.addEventListener("keydown", chooseSideFromKeyboard);
-window.onload = startCountdown;
+document.addEventListener("DOMContentLoaded", () => {
+    showInstructionBox();
+
+    const startButton = document.getElementById('start-game-button');
+    if (startButton) {
+        startButton.addEventListener('click', startCountdown);
+    }
+});
 
 function computeLocalScore() {
     const averageTime = correctClicks > 0 ? totalReactionTime / correctClicks : 0;

@@ -63,10 +63,18 @@ function showMemoryEndScreen(finalScore) {
     const introDisplay = document.getElementById("introDisplay");
     const feedbackOverlay = document.getElementById("feedbackOverlay");
     const endScreen = document.getElementById("memoryEndScreen");
+    const canvas = document.getElementById("gameCanvas");
+    const gameContainer = document.getElementById("gameContainer");
 
     if (timerDisplay) timerDisplay.style.display = "none";
     if (introDisplay) introDisplay.style.display = "none";
     if (feedbackOverlay) feedbackOverlay.style.display = "none";
+    if (canvas) {
+        canvas.style.display = "none";
+    }
+    if (gameContainer) {
+        gameContainer.style.alignItems = "center";
+    }
     if (!endScreen) return;
 
     const scoreSection =
@@ -86,5 +94,6 @@ function showMemoryEndScreen(finalScore) {
         </div>
     `;
 
-    endScreen.style.display = "block";
+    endScreen.style.display = "flex";
+    endScreen.style.marginTop = "0";
 }

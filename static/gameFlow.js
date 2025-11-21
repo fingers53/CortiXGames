@@ -45,10 +45,28 @@ function clearGrid() {
     drawGrid();
 }
 
-function showIntro(message) {
-    introDisplay.innerHTML = `<h2>${message}</h2>`;
+function showIntro(message, onContinue) {
+    const buttonMarkup = onContinue
+        ? '<button id="introContinueButton" class="intro-continue">Continue</button>'
+        : '';
+
+    introDisplay.innerHTML = `<div class="intro-content"><h2>${message}</h2>${buttonMarkup}</div>`;
     introDisplay.style.display = "block";
     timerDisplay.style.display = "none";
+
+    if (onContinue) {
+        const continueButton = document.getElementById("introContinueButton");
+        if (continueButton) {
+            continueButton.addEventListener(
+                "click",
+                () => {
+                    hideIntro();
+                    onContinue();
+                },
+                { once: true }
+            );
+        }
+    }
 }
 
 function hideIntro() {

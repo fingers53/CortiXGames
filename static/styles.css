@@ -1,7 +1,7 @@
 /* styles.css */
 body {
-    background-color: palegreen; /* Set background color to pale green */
-    font-family: Arial, sans-serif;
+    background-color: #F2F2F2; /* soft neutral grey */
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     margin: 0;
     padding: 0;
 }
@@ -13,26 +13,29 @@ body {
 
 .title h1 {
     font-size: 2.5em;
-    color: darkgreen;
-    font-family: 'Comic Sans MS', cursive, sans-serif;
+    color: #1F2933; /* dark slate */
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-weight: 700;
 }
 
 .emphasize {
-    color: darkred;
+    color: #B91C1C; /* refined deep red */
 }
 
 .game-button {
     padding: 20px;
     font-size: 1.5em;
-    background-color: lightblue;
+    background-color: #2563EB; /* primary blue */
+    color: #FFFFFF;
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    transition: background-color 0.3s ease;
+    transition: background-color 0.2s ease, transform 0.05s ease;
 }
 
 .game-button:hover {
-    background-color: deepskyblue;
+    background-color: #1D4ED8; /* darker blue on hover */
+    transform: translateY(-1px);
 }
 
 .bottom-buttons {
@@ -43,15 +46,17 @@ body {
     margin: 0 10px;
     padding: 10px 20px;
     font-size: 1.2em;
-    background-color: lightgray;
+    background-color: #E5E7EB; /* light grey */
+    color: #111827; /* near-black text */
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    transition: background-color 0.3s ease;
+    transition: background-color 0.2s ease, transform 0.05s ease;
 }
 
 .bottom-buttons button:hover {
-    background-color: gray;
+    background-color: #D1D5DB; /* slightly darker grey */
+    transform: translateY(-1px);
 }
 
 .sound-toggle {
@@ -82,7 +87,7 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #ccc;
+    background-color: #9CA3AF; /* muted grey */
     transition: .4s;
     border-radius: 34px;
 }
@@ -94,18 +99,19 @@ body {
     width: 14px;
     left: 3px;
     bottom: 3px;
-    background-color: white;
+    background-color: #FFFFFF;
     transition: .4s;
     border-radius: 50%;
 }
 
 input:checked + .slider {
-    background-color: #2196F3;
+    background-color: #10B981; /* emerald when ON */
 }
 
 input:checked + .slider:before {
     transform: translateX(20px);
 }
+
 /* Enlarged username input */
 .username-input {
     width: 250px;
@@ -114,6 +120,8 @@ input:checked + .slider:before {
     padding: 5px;
     border-radius: 5px;
     margin-top: 15px;
+    border: 1px solid #D1D5DB;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 /* Top leaderboard button */
@@ -127,14 +135,17 @@ input:checked + .slider:before {
     padding: 10px 20px;
     font-size: 16px;
     border: none;
-    background-color: #4CAF50;
+    background-color: #2563EB; /* same primary blue */
     color: white;
     border-radius: 5px;
     cursor: pointer;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    transition: background-color 0.2s ease, transform 0.05s ease;
 }
 
 .leaderboard-button:hover {
-    background-color: #45a049;
+    background-color: #1D4ED8;
+    transform: translateY(-1px);
 }
 
 /* Game buttons in a 1x2 grid */
@@ -147,9 +158,10 @@ input:checked + .slider:before {
 
 .best-scores {
     margin-top: 20px;
-    color: #2f4f4f;
+    color: #374151; /* slate */
     font-weight: bold;
     display: flex;
     justify-content: center;
     gap: 20px;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }

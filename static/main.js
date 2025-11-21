@@ -1,12 +1,7 @@
-/**
- * Landing page utilities for username handling and navigation.
- * Provides validation for usernames and gates game navigation on a saved username
- * stored in localStorage under the "username" key.
- */
-
 const USERNAME_KEY = "username";
 const bestReaction = document.getElementById("best-reaction");
 const bestMemory = document.getElementById("best-memory");
+const bestScoresContainer = document.getElementById("best-scores");
 
 function validateUsername(name) {
     const usernameRegex = /^[A-Za-z0-9_]{3,20}$/;
@@ -34,6 +29,7 @@ function confirmUsername() {
         enterButton.style.display = "none";
     }
 
+    // Now that we have a valid username, fetch best scores
     fetchBestScores();
 }
 
@@ -67,7 +63,7 @@ function hydrateUsernameField() {
 
     if (!usernameInput) return;
 
-    if (savedUsername) {
+    if (savedUsername && validateUsername(savedUsername)) {
         usernameInput.value = savedUsername;
         usernameInput.disabled = true;
         usernameInput.style.backgroundColor = "#f0f0f0";
@@ -75,15 +71,38 @@ function hydrateUsernameField() {
         if (enterButton) {
             enterButton.style.display = "none";
         }
+        // we *might* have scores; fetch them and show container only if they exist
+        fetchBestScores();
+    } else {
+        // no valid username → hide the block
+        if (bestScoresContainer) {
+            bestScoresContainer.style.display = "none";
+        }
     }
 }
 
 function renderBestScores(reactionBest, memoryBest) {
-    if (bestReaction) {
-        bestReaction.textContent = `Best Reaction: ${reactionBest ?? "–"}`;
+    const hasReaction = reactionBest != null;
+    const hasMemory = memoryBest != null;
+
+    // If we have no scores at all, keep it hidden
+    if (!hasReaction && !hasMemory) {
+        if (bestScoresContainer) {
+            bestScoresContainer.style.display = "none";
+        }
+        return;
     }
-    if (bestMemory) {
-        bestMemory.textContent = `Best Memory: ${memoryBest ?? "–"}`;
+
+    if (bestScoresContainer) {
+        bestScoresContainer.style.display = "block";
+    }
+
+    if (bestReaction && hasReaction) {
+        bestReaction.textContent = `Best Reaction: ${reactionBest}`;
+    }
+
+    if (bestMemory && hasMemory) {
+        bestMemory.textContent = `Best Memory: ${memoryBest}`;
     }
 }
 
@@ -96,12 +115,17 @@ function fetchBestScores() {
         .then((data) => {
             renderBestScores(data.reaction_best, data.memory_best);
         })
-        .catch((err) => console.error("Failed to fetch best scores:", err));
+        .catch((err) => {
+            console.error("Failed to fetch best scores:", err);
+            // on error, hide rather than show junk
+            if (bestScoresContainer) {
+                bestScoresContainer.style.display = "none";
+            }
+        });
 }
 
 window.addEventListener("DOMContentLoaded", () => {
     hydrateUsernameField();
-    fetchBestScores();
     attachNavigation("memory-button", "/memory-game");
     attachNavigation("reaction-button", "/reaction-game");
 });

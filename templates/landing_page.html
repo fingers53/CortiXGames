@@ -1,22 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <title>Eye-M-See Games</title>
+    <title>CORTI</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/styles.css">
 </head>
+
 <body>
     <div class="container">
         <div class="title">
-            <h1>Eye <span class="emphasize">M</span> See Games</h1>
+            <h1>CORTI<span class="emphasize">X</span>Games</h1>
         </div>
 
         <div class="bottom-buttons">
             <button onclick="location.href='/leaderboard'">Leaderboard</button>
             <div class="username-container">
-                <input type="text" id="username" class="username-input" placeholder="username_" />
+                <input type="text" id="username" class="username-input" placeholder="Write a username" />
                 <button id="enter-button" onclick="confirmUsername()">Enter</button>
             </div>
         </div>
@@ -26,12 +30,14 @@
             <button id="reaction-button" class="game-button">React</button>
         </div>
 
-        <div id="best-scores" class="best-scores">
-            <p id="best-reaction">Best Reaction: –</p>
-            <p id="best-memory">Best Memory: –</p>
+        <div id="best-scores" class="best-scores" style="display: none;">
+            <p id="best-reaction"></p>
+            <p id="best-memory"></p>
         </div>
+
     </div>
 
     <script src="/static/main.js"></script>
 </body>
+
 </html>

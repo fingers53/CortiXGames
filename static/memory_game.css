@@ -87,6 +87,27 @@ body {
     z-index: 10;
 }
 
+.intro-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+}
+
+.intro-continue {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    background-color: #4a90e2;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.intro-continue:hover {
+    background-color: #3a7bc0;
+}
+
 #introDisplay h2 {
     font-size: 36px;
 }

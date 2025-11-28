@@ -39,12 +39,14 @@
         }
 
         .leaderboard-table {
-    width: 100%;
-    min-width: 600px;      /* force a sensible layout */
-    margin: 10px 0;
-    border-collapse: collapse;
-    table-layout: fixed;   /* columns share width evenly */
-}
+            width: 100%;
+            min-width: 600px;
+            /* force a sensible layout */
+            margin: 10px 0;
+            border-collapse: collapse;
+            table-layout: fixed;
+            /* columns share width evenly */
+        }
 
 
         .leaderboard-table th,
@@ -93,6 +95,21 @@
     </div>
 
     <script>
+        function countryCodeToFlagEmoji(code) {
+            if (!code || typeof code !== "string" || code.length !== 2) {
+                return "🏳️"; // neutral fallback if something's off
+            }
+
+            const upper = code.toUpperCase();
+            const A = "A".charCodeAt(0);
+
+            const codePoints = [
+                0x1F1E6 + (upper.charCodeAt(0) - A),
+                0x1F1E6 + (upper.charCodeAt(1) - A),
+            ];
+
+            return String.fromCodePoint(...codePoints);
+        }
         async function loadLeaderboard() {
             try {
                 const response = await fetch('/api/leaderboard/reaction-game');
@@ -146,12 +163,13 @@
                     }
 
                     row.innerHTML = `
-                        <td>${index + 1}</td>
-                        <td>${countryCode}</td>
-                        <td>${displayName}</td>
-                        <td>${bestScore.toFixed(2)}</td>
-                        <td>${avgTime.toFixed(2)}</td>
-                    `;
+    <td>${index + 1}</td>
+    <td>${countryCodeToFlagEmoji(countryCode)}</td>
+    <td>${displayName}</td>
+    <td>${bestScore.toFixed(2)}</td>
+    <td>${avgTime.toFixed(2)}</td>
+`;
+
                     table.appendChild(row);
                 });
 

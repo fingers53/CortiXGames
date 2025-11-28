@@ -1,27 +1,42 @@
+import os
 import re
 import secrets
-import sqlite3
 from datetime import datetime
 from typing import Dict, List
+
+import psycopg2
+import psycopg2.extras
+import requests
+from dotenv import load_dotenv
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from creating_db import initialize_db
 from scoring import calculate_reaction_game_score
 
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
 csrf_sessions: Dict[str, str] = {}
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,20}$")
 
+def get_db_connection():
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not set")
+    # Supabase wants SSL
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
+
 
 def read_html(file_name: str) -> str:
-    with open(f"templates/{file_name}") as f:
+    with open(os.path.join("templates", file_name), "r", encoding="utf-8") as f:
         return f.read()
+
 
 
 def assert_valid_username(username: str):
@@ -30,30 +45,64 @@ def assert_valid_username(username: str):
 
 
 def get_country_code_from_ip(client_ip: str | None) -> str:
-    """Placeholder geo lookup."""
-    return "??" if not client_ip else "??"
+    """
+    Map IP -> ISO country code (e.g. 'IE', 'GB').
+    We do NOT store the IP anywhere, just use it transiently.
+    """
+    if not client_ip:
+        return "??"
+
+    try:
+        # Example using ipapi.co – swap if you prefer another service
+        resp = requests.get(f"https://ipapi.co/{client_ip}/json/", timeout=1.5)
+        if resp.status_code != 200:
+            return "??"
+        data = resp.json()
+        code = data.get("country")  # 'IE', 'GB', 'ES', ...
+        if code and len(code) == 2:
+            return code
+    except Exception:
+        pass
+
+    return "??"
 
 
-def get_or_create_user(conn: sqlite3.Connection, username: str, country_code: str | None) -> int:
+def get_or_create_user(conn, username: str, country_code: str | None) -> int:
+    """
+    Find an existing user by username or create a new one.
+
+    Uses the provided DB connection and does NOT commit; callers are
+    responsible for committing after this call.
+    """
     assert_valid_username(username)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, country_code FROM users WHERE username = ?", (username,))
-    row = cursor.fetchone()
-    if row:
-        user_id, existing_country = row
-        if country_code and country_code != existing_country:
-            cursor.execute(
-                "UPDATE users SET country_code = ? WHERE id = ?",
-                (country_code, user_id),
-            )
+
+    with conn.cursor() as cursor:
+        # Try to find existing user
+        cursor.execute(
+            "SELECT id, country_code FROM users WHERE username = %s",
+            (username,),
+        )
+        row = cursor.fetchone()
+        if row:
+            user_id, existing_country = row
+            # Update country_code if we learned something new
+            if country_code and country_code != existing_country:
+                cursor.execute(
+                    "UPDATE users SET country_code = %s WHERE id = %s",
+                    (country_code, user_id),
+                )
+            return user_id
+
+        # No existing user → create one
+        created_country = country_code or "??"
+        cursor.execute(
+            "INSERT INTO users (username, country_code) VALUES (%s, %s) RETURNING id",
+            (username, created_country),
+        )
+        user_id = cursor.fetchone()[0]
         return user_id
 
-    created_country = country_code or "??"
-    cursor.execute(
-        "INSERT INTO users (username, country_code) VALUES (?, ?)",
-        (username, created_country),
-    )
-    return cursor.lastrowid
+
 
 
 def ensure_session_tokens(request: Request):
@@ -130,11 +179,6 @@ def compute_memory_scores(question_log: List[Dict]) -> tuple[float, float, float
     return total, r1, r2, r3
 
 
-@app.on_event("startup")
-def ensure_db_schema():
-    initialize_db()
-
-
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
     return render_template("landing_page.html", request)
@@ -184,31 +228,32 @@ async def submit_reaction_score(request: Request, _=Depends(csrf_protected)):
     slowest_time_ms = score_result["slowestTime"]
     accuracy = score_result["accuracy"]
 
-    conn = sqlite3.connect("scores.sqlite3")
+    conn = get_db_connection()
     try:
         user_id = get_or_create_user(conn, username, country_code)
         created_at = datetime.utcnow().isoformat()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO reaction_scores (
-                user_id, score, average_time_ms, fastest_time_ms,
-                slowest_time_ms, accuracy, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                user_id,
-                final_score,
-                average_time_ms,
-                fastest_time_ms,
-                slowest_time_ms,
-                accuracy,
-                created_at,
-            ),
-        )
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO reaction_scores (
+                    user_id, score, average_time_ms, fastest_time_ms,
+                    slowest_time_ms, accuracy, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    user_id,
+                    final_score,
+                    average_time_ms,
+                    fastest_time_ms,
+                    slowest_time_ms,
+                    accuracy,
+                    created_at,
+                ),
+            )
         conn.commit()
     finally:
         conn.close()
+
 
     return JSONResponse(content={"status": "success", "scoreResult": score_result})
 
@@ -244,19 +289,19 @@ async def submit_memory_score(request: Request, _=Depends(csrf_protected)):
     total_score, r1, r2, r3 = compute_memory_scores(question_log)
     country_code = country_input or get_country_code_from_ip(request.client.host)
 
-    conn = sqlite3.connect("scores.sqlite3")
+    conn = get_db_connection()
     try:
         user_id = get_or_create_user(conn, username, country_code)
         created_at = datetime.utcnow().isoformat()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO memory_scores (
-                user_id, total_score, round1_score, round2_score, round3_score, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (user_id, total_score, r1, r2, r3, created_at),
-        )
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO memory_scores (
+                    user_id, total_score, round1_score, round2_score, round3_score, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (user_id, total_score, r1, r2, r3, created_at),
+            )
         conn.commit()
     finally:
         conn.close()
@@ -274,57 +319,104 @@ async def submit_memory_score(request: Request, _=Depends(csrf_protected)):
 
 @app.get("/api/leaderboard/reaction-game")
 async def reaction_leaderboard_api():
-    conn = sqlite3.connect("scores.sqlite3")
+    conn = get_db_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT
-                u.username,
-                u.country_code,
-                MAX(r.score) AS best_score,
-                AVG(r.average_time_ms) AS avg_time,
-                MAX(r.created_at) AS last_played
-            FROM reaction_scores r
-            JOIN users u ON u.id = r.user_id
-            GROUP BY u.username, u.country_code
-            ORDER BY best_score DESC
-            """
-        )
-        scores = cursor.fetchall()
-        cursor.execute("SELECT MAX(created_at) FROM reaction_scores")
-        last_updated_row = cursor.fetchone()
-        last_updated = last_updated_row[0][:10] if last_updated_row and last_updated_row[0] else None
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    u.username,
+                    u.country_code,
+                    MAX(r.score) AS best_score,
+                    AVG(r.average_time_ms) AS avg_time,
+                    MAX(r.created_at) AS last_played
+                FROM reaction_scores r
+                JOIN users u ON u.id = r.user_id
+                GROUP BY u.username, u.country_code
+                ORDER BY best_score DESC
+                """
+            )
+            rows = cursor.fetchall()
+
+            # Convert to list-of-lists, same order as before:
+            # [username, country_code, best_score, avg_time, last_played]
+            scores = []
+            for row in rows:
+                username, country_code, best_score, avg_time, last_played = row
+                scores.append([
+                    username,
+                    country_code,
+                    float(best_score) if best_score is not None else None,
+                    float(avg_time) if avg_time is not None else None,
+                    last_played.isoformat() if last_played else None,
+                ])
+
+            cursor.execute("SELECT MAX(created_at) FROM reaction_scores")
+            last_updated_row = cursor.fetchone()
+            last_updated = (
+                last_updated_row[0].date().isoformat()
+                if last_updated_row and last_updated_row[0]
+                else None
+            )
+
         return JSONResponse(content={"scores": scores, "last_updated": last_updated})
     finally:
         conn.close()
 
-
 @app.get("/api/leaderboard/memory-game")
 async def memory_leaderboard_api():
-    conn = sqlite3.connect("scores.sqlite3")
+    conn = get_db_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT
-                u.username,
-                u.country_code,
-                MAX(m.total_score) AS best_total,
-                MAX(m.round1_score) AS best_r1,
-                MAX(m.round2_score) AS best_r2,
-                MAX(m.round3_score) AS best_r3,
-                MAX(m.created_at) AS last_played
-            FROM memory_scores m
-            JOIN users u ON u.id = m.user_id
-            GROUP BY u.username, u.country_code
-            ORDER BY best_total DESC
-            """
-        )
-        scores = cursor.fetchall()
-        cursor.execute("SELECT MAX(created_at) FROM memory_scores")
-        last_updated_row = cursor.fetchone()
-        last_updated = last_updated_row[0][:10] if last_updated_row and last_updated_row[0] else None
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    u.username,
+                    u.country_code,
+                    MAX(m.total_score) AS best_total,
+                    MAX(m.round1_score) AS best_r1,
+                    MAX(m.round2_score) AS best_r2,
+                    MAX(m.round3_score) AS best_r3,
+                    MAX(m.created_at) AS last_played
+                FROM memory_scores m
+                JOIN users u ON u.id = m.user_id
+                GROUP BY u.username, u.country_code
+                ORDER BY best_total DESC
+                """
+            )
+            rows = cursor.fetchall()
+
+            # Again: list-of-lists, in the exact order your old JS expects:
+            # [username, country_code, best_total, best_r1, best_r2, best_r3, last_played]
+            scores = []
+            for row in rows:
+                (
+                    username,
+                    country_code,
+                    best_total,
+                    best_r1,
+                    best_r2,
+                    best_r3,
+                    last_played,
+                ) = row
+                scores.append([
+                    username,
+                    country_code,
+                    float(best_total) if best_total is not None else None,
+                    float(best_r1) if best_r1 is not None else None,
+                    float(best_r2) if best_r2 is not None else None,
+                    float(best_r3) if best_r3 is not None else None,
+                    last_played.isoformat() if last_played else None,
+                ])
+
+            cursor.execute("SELECT MAX(created_at) FROM memory_scores")
+            last_updated_row = cursor.fetchone()
+            last_updated = (
+                last_updated_row[0].date().isoformat()
+                if last_updated_row and last_updated_row[0]
+                else None
+            )
+
         return JSONResponse(content={"scores": scores, "last_updated": last_updated})
     finally:
         conn.close()
@@ -333,20 +425,28 @@ async def memory_leaderboard_api():
 @app.get("/api/my-best-scores")
 async def my_best_scores(username: str):
     assert_valid_username(username)
-    conn = sqlite3.connect("scores.sqlite3")
-    conn.row_factory = sqlite3.Row
+    conn = get_db_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
-        row = cursor.fetchone()
-        if not row:
-            return {"username": username, "reaction_best": None, "memory_best": None}
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
+            row = cursor.fetchone()
+            if not row:
+                return {"username": username, "reaction_best": None, "memory_best": None}
 
-        user_id = row[0]
-        cursor.execute("SELECT MAX(score) FROM reaction_scores WHERE user_id = ?", (user_id,))
-        reaction_best = cursor.fetchone()[0]
-        cursor.execute("SELECT MAX(total_score) FROM memory_scores WHERE user_id = ?", (user_id,))
-        memory_best = cursor.fetchone()[0]
+            user_id = row[0]
+
+            cursor.execute(
+                "SELECT MAX(score) FROM reaction_scores WHERE user_id = %s",
+                (user_id,),
+            )
+            reaction_best = cursor.fetchone()[0]
+
+            cursor.execute(
+                "SELECT MAX(total_score) FROM memory_scores WHERE user_id = %s",
+                (user_id,),
+            )
+            memory_best = cursor.fetchone()[0]
+
         return {
             "username": username,
             "reaction_best": reaction_best,
@@ -354,3 +454,4 @@ async def my_best_scores(username: str):
         }
     finally:
         conn.close()
+

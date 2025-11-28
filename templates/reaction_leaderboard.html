@@ -81,6 +81,14 @@
             background-color: rgba(255, 255, 0, 0.15);
             font-weight: bold;
         }
+        .flag-icon {
+    width: 24px;
+    height: 18px;
+    border-radius: 3px;
+    object-fit: cover;
+    vertical-align: middle;
+}
+
     </style>
 </head>
 
@@ -95,98 +103,95 @@
     </div>
 
     <script>
-        function countryCodeToFlagEmoji(code) {
-            if (!code || typeof code !== "string" || code.length !== 2) {
-                return "🏳️"; // neutral fallback if something's off
-            }
+    function countryCodeToFlagImg(code) {
+        if (!code || typeof code !== "string") {
+            return "";
+        }
 
-            const upper = code.toUpperCase();
-            const A = "A".charCodeAt(0);
+        let cc = code.trim().toLowerCase();
 
-            const codePoints = [
-                0x1F1E6 + (upper.charCodeAt(0) - A),
-                0x1F1E6 + (upper.charCodeAt(1) - A),
+        // Normalise weird cases if you ever have them
+        if (cc === "uk") cc = "gb";
+
+        // 24x18 is plenty for tables; adjust if you want bigger
+        const src = `https://flagcdn.com/24x18/${cc}.png`;
+
+        return `<img src="${src}" class="flag-icon" alt="${code} flag" loading="lazy">`;
+    }
+
+    async function loadLeaderboard() {
+        try {
+            const response = await fetch('/api/leaderboard/reaction-game');
+            const data = await response.json();
+            const scores = data.scores.slice(0, 100); // Limit to 100 scores
+            const currentUsername = localStorage.getItem('username') || null;
+
+            const leaderboardContainer = document.getElementById('reaction-leaderboard');
+            leaderboardContainer.innerHTML = ''; // Clear loading message
+
+            const table = document.createElement('table');
+            table.className = "leaderboard-table";
+
+            const header = document.createElement('tr');
+            header.innerHTML = `
+                <th>Rank</th>
+                <th>Flag</th>
+                <th>Username</th>
+                <th>Score</th>
+                <th>Avg Reaction Time (ms)</th>
+            `;
+            table.appendChild(header);
+
+            const MEDAL_EMOJIS = [
+                "",
+                "\u{1F947}",
+                "\u{1F948}",
+                "\u{1F949}"
             ];
 
-            return String.fromCodePoint(...codePoints);
-        }
-        async function loadLeaderboard() {
-            try {
-                const response = await fetch('/api/leaderboard/reaction-game');
-                const data = await response.json();
-                const scores = data.scores.slice(0, 100); // Limit to 100 scores
-                const currentUsername = localStorage.getItem('username') || null;
+            scores.forEach((score, index) => {
+                const username = score[0];
+                const countryCode = score[1] || '';
+                const bestScore = Number(score[2] ?? 0);
+                const avgTime = Number(score[3] ?? 0);
 
-                const leaderboardContainer = document.getElementById('reaction-leaderboard');
-                leaderboardContainer.innerHTML = ''; // Clear loading message
+                let medal = "";
+                if (index === 0) medal = MEDAL_EMOJIS[1];
+                else if (index === 1) medal = MEDAL_EMOJIS[2];
+                else if (index === 2) medal = MEDAL_EMOJIS[3];
 
-                const table = document.createElement('table');
-                table.className = "leaderboard-table";
+                const displayName = medal ? `${medal} ${username}` : username;
 
-                // Table header
-                const header = document.createElement('tr');
-                header.innerHTML = `
-                    <th>Rank</th>
-                    <th>Flag</th>
-                    <th>Username</th>
-                    <th>Score</th>
-                    <th>Avg Reaction Time (ms)</th>
-                `;
-                table.appendChild(header);
-
-                const MEDAL_EMOJIS = [
-                    "",              // index 0 (no medal)
-                    "\u{1F947}",     // 🥇 gold
-                    "\u{1F948}",     // 🥈 silver
-                    "\u{1F949}"      // 🥉 bronze
-                ];
-
-
-                // Table rows for scores
-                scores.forEach((score, index) => {
-                    const username = score[0];
-                    const countryCode = score[1] || '';
-                    const bestScore = Number(score[2] ?? 0);
-                    const avgTime = Number(score[3] ?? 0);
-
-                    let medal = "";
-                    if (index === 0) medal = MEDAL_EMOJIS[1];
-                    else if (index === 1) medal = MEDAL_EMOJIS[2];
-                    else if (index === 2) medal = MEDAL_EMOJIS[3];
-
-                    const displayName = medal ? `${medal} ${username}` : username;
-
-
-                    const row = document.createElement('tr');
-                    if (currentUsername && username === currentUsername) {
-                        row.classList.add('current-user');
-                    }
-
-                    row.innerHTML = `
-    <td>${index + 1}</td>
-    <td>${countryCodeToFlagEmoji(countryCode)}</td>
-    <td>${displayName}</td>
-    <td>${bestScore.toFixed(2)}</td>
-    <td>${avgTime.toFixed(2)}</td>
-`;
-
-                    table.appendChild(row);
-                });
-
-                leaderboardContainer.appendChild(table);
-
-                const updatedElem = document.getElementById('reaction-last-updated');
-                if (updatedElem && data.last_updated) {
-                    updatedElem.textContent = `Last updated: ${data.last_updated}`;
+                const row = document.createElement('tr');
+                if (currentUsername && username === currentUsername) {
+                    row.classList.add('current-user');
                 }
-            } catch (error) {
-                console.error('Error loading leaderboard data:', error);
-                document.getElementById('reaction-leaderboard').innerHTML = '<p>Failed to load leaderboard data.</p>';
-            }
-        }
 
-        window.onload = loadLeaderboard;
-    </script>
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${countryCodeToFlagImg(countryCode)}</td>
+                    <td>${displayName}</td>
+                    <td>${bestScore.toFixed(2)}</td>
+                    <td>${avgTime.toFixed(2)}</td>
+                `;
+                table.appendChild(row);
+            });
+
+            leaderboardContainer.appendChild(table);
+
+            const updatedElem = document.getElementById('reaction-last-updated');
+            if (updatedElem && data.last_updated) {
+                updatedElem.textContent = `Last updated: ${data.last_updated}`;
+            }
+        } catch (error) {
+            console.error('Error loading leaderboard data:', error);
+            document.getElementById('reaction-leaderboard').innerHTML = '<p>Failed to load leaderboard data.</p>';
+        }
+    }
+
+    window.onload = loadLeaderboard;
+</script>
+
 </body>
 
 </html>

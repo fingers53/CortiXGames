@@ -13,7 +13,8 @@ def initialize_db():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            country_code TEXT
+            country_code TEXT,
+            password_hash TEXT
         )
         """
     )

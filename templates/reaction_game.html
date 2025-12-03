@@ -6,9 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Reaction Game</title>
+    <link rel="stylesheet" href="/static/auth.css">
     <link rel="stylesheet" href="/static/reaction_game.css">
 </head>
 <body>
+    <div class="auth-bar">
+        {% if current_user %}
+            <span>Logged in as <strong>{{ current_user.username }}</strong></span>
+            <a href="/logout" class="auth-link">Logout</a>
+        {% else %}
+            <a href="/login" class="auth-link">Log in</a>
+            <span class="auth-separator">|</span>
+            <a href="/signup" class="auth-link">Sign up</a>
+        {% endif %}
+    </div>
     <div id="instruction-box" class="instruction-box">
         <h2>Reaction Game Instructions</h2>
         <p>Place your hands on the 0 and 1 keys.</p>
@@ -51,5 +62,10 @@
     </div>
 
     <script src="/static/reaction_game.js"></script>
+    <script>
+        {% if current_user %}
+        localStorage.setItem("username", {{ current_user.username | tojson }});
+        {% endif %}
+    </script>
 </body>
 </html>

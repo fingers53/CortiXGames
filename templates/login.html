@@ -2,12 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <title>Memory Game</title>
+    <title>Log In</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/auth.css">
-    <link rel="stylesheet" href="/static/memory_game.css">
 </head>
 <body>
     <div class="auth-bar">
@@ -20,19 +19,19 @@
             <a href="/signup" class="auth-link">Sign up</a>
         {% endif %}
     </div>
-    <div id="gameContainer">
-        <div id="timerDisplay"></div>
-        <canvas id="gameCanvas"></canvas>
-        <div id="introDisplay" class="overlay"></div>
-        <div id="feedbackOverlay" class="overlay"></div>
-        <div id="memoryEndScreen" class="end-screen" style="display: none;"></div>
-    </div>
-
-    <script type="module" src="/static/memory_game.js"></script>
-    <script>
-        {% if current_user %}
-        localStorage.setItem("username", {{ current_user.username | tojson }});
+    <form class="auth-form" method="POST" action="/login">
+        <h2>Log in</h2>
+        {% if error %}
+            <div class="error">{{ error }}</div>
         {% endif %}
-    </script>
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required maxlength="20" pattern="[A-Za-z0-9_]{3,20}">
+
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+
+        <button type="submit">Log in</button>
+        <div class="helper">No account? <a href="/signup">Create one</a>.</div>
+    </form>
 </body>
 </html>

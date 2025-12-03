@@ -5,13 +5,15 @@
     <meta charset="UTF-8">
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/auth.css">
     <title>Reaction Game Leaderboard</title>
     <style>
         body {
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            flex-direction: column;
+            min-height: 100vh;
             background-color: #b3d3a6;
             margin: 0;
             font-family: Arial, sans-serif;
@@ -93,6 +95,16 @@
 </head>
 
 <body>
+    <div class="auth-bar">
+        {% if current_user %}
+            <span>Logged in as <strong>{{ current_user.username }}</strong></span>
+            <a href="/logout" class="auth-link">Logout</a>
+        {% else %}
+            <a href="/login" class="auth-link">Log in</a>
+            <span class="auth-separator">|</span>
+            <a href="/signup" class="auth-link">Sign up</a>
+        {% endif %}
+    </div>
     <div class="container">
         <h1>Reaction Game Leaderboard</h1>
         <div id="reaction-leaderboard" class="end-screen">
@@ -190,7 +202,10 @@
     }
 
     window.onload = loadLeaderboard;
-</script>
+    {% if current_user %}
+    localStorage.setItem('username', {{ current_user.username | tojson }});
+    {% endif %}
+    </script>
 
 </body>
 

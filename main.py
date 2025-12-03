@@ -2,29 +2,36 @@ import os
 import re
 import secrets
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import psycopg2
 import psycopg2.extras
 import requests
 from dotenv import load_dotenv
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from passlib.context import CryptContext
 
 from scoring import calculate_reaction_game_score
 
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
+SESSION_COOKIE_NAME = "session_user_id"
+SESSION_MAX_AGE = 60 * 60 * 24 * 7  # 1 week
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
 
 csrf_sessions: Dict[str, str] = {}
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,20}$")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def get_db_connection():
     if not DATABASE_URL:
@@ -67,6 +74,16 @@ def get_country_code_from_ip(client_ip: str | None) -> str:
     return "??"
 
 
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(password: str, password_hash: str | None) -> bool:
+    if not password_hash:
+        return False
+    return pwd_context.verify(password, password_hash)
+
+
 def get_or_create_user(conn, username: str, country_code: str | None) -> int:
     """
     Find an existing user by username or create a new one.
@@ -103,6 +120,16 @@ def get_or_create_user(conn, username: str, country_code: str | None) -> int:
         return user_id
 
 
+def get_user_by_id(conn, user_id: int) -> Optional[dict]:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+        cursor.execute(
+            "SELECT id, username, country_code, password_hash FROM users WHERE id = %s",
+            (user_id,),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
 
 
 def ensure_session_tokens(request: Request):
@@ -121,10 +148,59 @@ def ensure_session_tokens(request: Request):
     return session_id, csrf_token, new_cookie
 
 
-def render_template(file_name: str, request: Request) -> HTMLResponse:
+def set_session_cookie(response, user_id: int):
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        str(user_id),
+        httponly=True,
+        max_age=SESSION_MAX_AGE,
+        samesite="lax",
+        secure=SESSION_COOKIE_SECURE,
+    )
+
+
+def clear_session_cookie(response):
+    response.delete_cookie(
+        SESSION_COOKIE_NAME,
+        httponly=True,
+        samesite="lax",
+        secure=SESSION_COOKIE_SECURE,
+    )
+
+
+def get_current_user_from_request(request: Request) -> Optional[dict]:
+    raw_id = request.cookies.get(SESSION_COOKIE_NAME)
+    if not raw_id:
+        return None
+
+    try:
+        user_id = int(raw_id)
+    except ValueError:
+        return None
+
+    conn = get_db_connection()
+    try:
+        return get_user_by_id(conn, user_id)
+    finally:
+        conn.close()
+
+
+async def get_current_user(request: Request) -> Optional[dict]:
+    return get_current_user_from_request(request)
+
+
+def render_template(
+    file_name: str, request: Request, context: Optional[dict] = None
+) -> HTMLResponse:
     session_id, csrf_token, new_cookie = ensure_session_tokens(request)
-    content = read_html(file_name).replace("{{ csrf_token }}", csrf_token)
-    response = HTMLResponse(content=content)
+    base_context = {
+        "request": request,
+        "csrf_token": csrf_token,
+    }
+    if context:
+        base_context.update(context)
+
+    response = templates.TemplateResponse(file_name, base_context)
     if new_cookie:
         response.set_cookie("session_id", session_id, httponly=True, samesite="lax")
     return response
@@ -179,45 +255,159 @@ def compute_memory_scores(question_log: List[Dict]) -> tuple[float, float, float
     return total, r1, r2, r3
 
 
+def resolve_user_id(
+    conn, current_user: Optional[dict], username: Optional[str], country_code: str | None
+) -> int:
+    if current_user:
+        user_id = current_user["id"]
+        if country_code and country_code != current_user.get("country_code"):
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE users SET country_code = %s WHERE id = %s",
+                    (country_code, user_id),
+                )
+        return user_id
+
+    assert_valid_username(username or "")
+    return get_or_create_user(conn, username, country_code)
+
+
 @app.get("/", response_class=HTMLResponse)
-async def landing_page(request: Request):
-    return render_template("landing_page.html", request)
+async def landing_page(request: Request, current_user=Depends(get_current_user)):
+    return render_template("landing_page.html", request, {"current_user": current_user})
 
 
 @app.get("/memory-game", response_class=HTMLResponse)
-async def memory_game(request: Request):
-    return render_template("memory_game.html", request)
+async def memory_game(request: Request, current_user=Depends(get_current_user)):
+    return render_template("memory_game.html", request, {"current_user": current_user})
 
 
 @app.get("/reaction-game", response_class=HTMLResponse)
-async def reaction_game(request: Request):
-    return render_template("reaction_game.html", request)
+async def reaction_game(request: Request, current_user=Depends(get_current_user)):
+    return render_template("reaction_game.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard", response_class=HTMLResponse)
-async def leaderboard(request: Request):
-    return render_template("leaderboard.html", request)
+async def leaderboard(request: Request, current_user=Depends(get_current_user)):
+    return render_template("leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/reaction-game", response_class=HTMLResponse)
-async def reaction_game_leaderboard(request: Request):
-    return render_template("reaction_leaderboard.html", request)
+async def reaction_game_leaderboard(request: Request, current_user=Depends(get_current_user)):
+    return render_template("reaction_leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/memory-game", response_class=HTMLResponse)
-async def memory_game_leaderboard(request: Request):
-    return render_template("memory_leaderboard.html", request)
+async def memory_game_leaderboard(request: Request, current_user=Depends(get_current_user)):
+    return render_template("memory_leaderboard.html", request, {"current_user": current_user})
+
+
+@app.get("/signup", response_class=HTMLResponse)
+async def signup_form(request: Request, current_user=Depends(get_current_user)):
+    return render_template("signup.html", request, {"current_user": current_user})
+
+
+@app.post("/signup", response_class=HTMLResponse)
+async def signup(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+):
+    assert_valid_username(username)
+    if not password or len(password) < 6:
+        return render_template(
+            "signup.html",
+            request,
+            {"error": "Password must be at least 6 characters long."},
+        )
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
+            if cursor.fetchone():
+                return render_template(
+                    "signup.html",
+                    request,
+                    {"error": "Username already taken."},
+                )
+
+            password_hash = hash_password(password)
+            cursor.execute(
+                "INSERT INTO users (username, country_code, password_hash) VALUES (%s, %s, %s) RETURNING id",
+                (username, "??", password_hash),
+            )
+            user_id = cursor.fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+
+    session_id, _, new_cookie = ensure_session_tokens(request)
+    response = RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+    set_session_cookie(response, user_id)
+    if new_cookie:
+        response.set_cookie("session_id", session_id, httponly=True, samesite="lax")
+    return response
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request, current_user=Depends(get_current_user)):
+    return render_template("login.html", request, {"current_user": current_user})
+
+
+@app.post("/login", response_class=HTMLResponse)
+async def login(request: Request, username: str = Form(...), password: str = Form(...)):
+    assert_valid_username(username)
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+            cursor.execute(
+                "SELECT id, password_hash FROM users WHERE username = %s",
+                (username,),
+            )
+            row = cursor.fetchone()
+
+        if not row or not verify_password(password, row.get("password_hash")):
+            return render_template(
+                "login.html",
+                request,
+                {"error": "Invalid username or password."},
+            )
+
+        user_id = row["id"]
+    finally:
+        conn.close()
+
+    session_id, _, new_cookie = ensure_session_tokens(request)
+    response = RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+    set_session_cookie(response, user_id)
+    if new_cookie:
+        response.set_cookie("session_id", session_id, httponly=True, samesite="lax")
+    return response
+
+
+@app.get("/logout")
+async def logout(request: Request):
+    session_id, _, new_cookie = ensure_session_tokens(request)
+    response = RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+    clear_session_cookie(response)
+    if new_cookie:
+        response.set_cookie("session_id", session_id, httponly=True, samesite="lax")
+    return response
 
 
 @app.post("/reaction-game/submit_score")
-async def submit_reaction_score(request: Request, _=Depends(csrf_protected)):
+async def submit_reaction_score(
+    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+):
     data = await request.json()
     username = data.get("username")
     country_input = data.get("country") or data.get("countryCode")
     score_data = data.get("scoreData") or {}
     answer_record = score_data.get("answerRecord") or []
 
-    assert_valid_username(username)
+    if not current_user:
+        assert_valid_username(username)
     validate_answer_record(answer_record)
 
     score_result = calculate_reaction_game_score(answer_record)
@@ -230,7 +420,7 @@ async def submit_reaction_score(request: Request, _=Depends(csrf_protected)):
 
     conn = get_db_connection()
     try:
-        user_id = get_or_create_user(conn, username, country_code)
+        user_id = resolve_user_id(conn, current_user, username, country_code)
         created_at = datetime.utcnow().isoformat()
         with conn.cursor() as cursor:
             cursor.execute(
@@ -259,13 +449,16 @@ async def submit_reaction_score(request: Request, _=Depends(csrf_protected)):
 
 
 @app.post("/memory-game/submit_score")
-async def submit_memory_score(request: Request, _=Depends(csrf_protected)):
+async def submit_memory_score(
+    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+):
     data = await request.json()
     username = data.get("username")
     country_input = data.get("country") or data.get("countryCode")
     question_log = data.get("questionLog") or []
 
-    assert_valid_username(username)
+    if not current_user:
+        assert_valid_username(username)
 
     if not isinstance(question_log, list) or not (1 <= len(question_log) <= 200):
         raise HTTPException(status_code=422, detail="Invalid question log length")
@@ -291,7 +484,7 @@ async def submit_memory_score(request: Request, _=Depends(csrf_protected)):
 
     conn = get_db_connection()
     try:
-        user_id = get_or_create_user(conn, username, country_code)
+        user_id = resolve_user_id(conn, current_user, username, country_code)
         created_at = datetime.utcnow().isoformat()
         with conn.cursor() as cursor:
             cursor.execute(

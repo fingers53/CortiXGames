@@ -272,6 +272,25 @@ def resolve_user_id(
     return get_or_create_user(conn, username, country_code)
 
 
+def fetch_recent_attempts(conn, user_id: int) -> List[dict]:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+        cursor.execute(
+            """
+            SELECT 'reaction' AS game, score AS score, created_at
+            FROM reaction_scores
+            WHERE user_id = %s
+            UNION ALL
+            SELECT 'memory' AS game, total_score AS score, created_at
+            FROM memory_scores
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 20
+            """,
+            (user_id, user_id),
+        )
+        return cursor.fetchall()
+
+
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request, current_user=Depends(get_current_user)):
     return render_template("landing_page.html", request, {"current_user": current_user})
@@ -394,6 +413,75 @@ async def logout(request: Request):
     if new_cookie:
         response.set_cookie("session_id", session_id, httponly=True, samesite="lax")
     return response
+
+
+@app.get("/profile", response_class=HTMLResponse)
+async def profile(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        return RedirectResponse("/login", status_code=status.HTTP_302_FOUND)
+
+    conn = get_db_connection()
+    try:
+        attempts = fetch_recent_attempts(conn, current_user["id"])
+    finally:
+        conn.close()
+
+    return render_template(
+        "profile.html",
+        request,
+        {"current_user": current_user, "attempts": attempts},
+    )
+
+
+@app.post("/profile/flag", response_class=HTMLResponse)
+async def update_flag(
+    request: Request,
+    country_code: str = Form(...),
+    current_user=Depends(get_current_user),
+):
+    if not current_user:
+        return RedirectResponse("/login", status_code=status.HTTP_302_FOUND)
+
+    code = (country_code or "").strip().upper()
+    if not re.match(r"^[A-Z]{2}$", code):
+        conn = get_db_connection()
+        try:
+            attempts = fetch_recent_attempts(conn, current_user["id"])
+        finally:
+            conn.close()
+        return render_template(
+            "profile.html",
+            request,
+            {
+                "current_user": current_user,
+                "attempts": attempts,
+                "error": "Please provide a two-letter country code (e.g., US, GB).",
+            },
+        )
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "UPDATE users SET country_code = %s WHERE id = %s",
+                (code, current_user["id"]),
+            )
+        conn.commit()
+        attempts = fetch_recent_attempts(conn, current_user["id"])
+    finally:
+        conn.close()
+
+    updated_user = dict(current_user)
+    updated_user["country_code"] = code
+    return render_template(
+        "profile.html",
+        request,
+        {
+            "current_user": updated_user,
+            "attempts": attempts,
+            "message": "Flag updated for your account.",
+        },
+    )
 
 
 @app.post("/reaction-game/submit_score")

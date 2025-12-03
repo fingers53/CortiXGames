@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>Your Profile</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/auth.css">
+</head>
+<body>
+    <div class="auth-bar">
+        {% if current_user %}
+            <span>Logged in as <strong>{{ current_user.username }}</strong></span>
+            <a href="/profile" class="auth-link">Profile</a>
+            <span class="auth-separator">|</span>
+            <a href="/logout" class="auth-link">Logout</a>
+        {% else %}
+            <a href="/login" class="auth-link">Log in</a>
+            <span class="auth-separator">|</span>
+            <a href="/signup" class="auth-link">Sign up</a>
+        {% endif %}
+    </div>
+
+    <div class="auth-form profile-card">
+        <h2>Your recent attempts</h2>
+        <p class="muted">Scores attached to your account persist across devices. Guests stay on the local browser only.</p>
+        <div class="flag-row">
+            <div>
+                <div class="muted">Current flag</div>
+                <div class="flag-pill">{{ current_user.country_code or '??' }}</div>
+            </div>
+            <form method="POST" action="/profile/flag" class="flag-form">
+                <label for="country_code">Add or update your two-letter flag</label>
+                <div class="flag-input-row">
+                    <input type="text" id="country_code" name="country_code" maxlength="2" placeholder="US" required>
+                    <button type="submit">Save</button>
+                </div>
+            </form>
+        </div>
+        {% if message %}
+            <div class="notice success">{{ message }}</div>
+        {% endif %}
+        {% if error %}
+            <div class="notice error">{{ error }}</div>
+        {% endif %}
+
+        {% if attempts %}
+            <table class="attempt-table">
+                <thead>
+                    <tr>
+                        <th>Game</th>
+                        <th>Score</th>
+                        <th>When</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for attempt in attempts %}
+                        <tr>
+                            <td>{{ attempt.game | capitalize }}</td>
+                            <td>{{ attempt.score }}</td>
+                            <td>{{ attempt.created_at }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="muted">No attempts recorded yet. Play a game to see your history.</p>
+        {% endif %}
+    </div>
+</body>
+</html>

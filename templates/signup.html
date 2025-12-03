@@ -12,6 +12,8 @@
     <div class="auth-bar">
         {% if current_user %}
             <span>Logged in as <strong>{{ current_user.username }}</strong></span>
+            <a href="/profile" class="auth-link">Profile</a>
+            <span class="auth-separator">|</span>
             <a href="/logout" class="auth-link">Logout</a>
         {% else %}
             <a href="/login" class="auth-link">Log in</a>
@@ -32,6 +34,7 @@
 
         <button type="submit">Sign up</button>
         <div class="helper">Already have an account? <a href="/login">Log in</a>.</div>
+        <div class="auth-note">Set a password to make sure your scores follow you, not just your browser.</div>
     </form>
 </body>
 </html>

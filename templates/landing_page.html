@@ -16,6 +16,8 @@
     <div class="auth-bar">
         {% if current_user %}
             <span>Logged in as <strong>{{ current_user.username }}</strong></span>
+            <a href="/profile" class="auth-link">Profile</a>
+            <span class="auth-separator">|</span>
             <a href="/logout" class="auth-link">Logout</a>
         {% else %}
             <a href="/login" class="auth-link">Log in</a>
@@ -34,6 +36,10 @@
                 <input type="text" id="username" class="username-input" placeholder="Write a username" />
                 <button id="enter-button" onclick="confirmUsername()">Enter</button>
             </div>
+        </div>
+
+        <div class="auth-note">
+            Guest scores stay on this browser. Create a username and password to keep your scores everywhere.
         </div>
 
         <div class="game-grid">

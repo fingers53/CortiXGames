@@ -5,6 +5,7 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Game Leaderboard</title>
+    <link rel="stylesheet" href="/static/auth.css">
     <link rel="stylesheet" href="/static/styles.css">
     <style>
         .button-container {
@@ -33,6 +34,14 @@
     </style>
 </head>
 <body>
+    {% if current_user %}
+    <div class="auth-bar">
+        <span>Logged in as <strong>{{ current_user.username }}</strong></span>
+        <a href="/profile" class="auth-link">Profile</a>
+        <span class="auth-separator">|</span>
+        <a href="/logout" class="auth-link">Logout</a>
+    </div>
+    {% endif %}
     <div class="container">
         <h1>Leaderboard</h1>
 

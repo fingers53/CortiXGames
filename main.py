@@ -440,8 +440,25 @@ async def memory_game_leaderboard(request: Request, current_user=Depends(get_cur
 
 
 @app.get("/signup", response_class=HTMLResponse)
-async def signup_form(request: Request, current_user=Depends(get_current_user)):
-    return render_template("signup.html", request, {"current_user": current_user})
+async def signup_form(request: Request):
+    return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+
+
+def render_landing_error(request: Request, message: str, username: str):
+    return render_template(
+        "landing_page.html",
+        request,
+        {"error": message, "prefill_username": username, "current_user": None},
+    )
+
+
+def login_and_redirect(request: Request, user_id: int):
+    session_id, _, new_cookie = ensure_session_tokens(request)
+    response = RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+    set_session_cookie(response, user_id)
+    if new_cookie:
+        response.set_cookie("session_id", session_id, httponly=True, samesite="lax")
+    return response
 
 
 @app.post("/signup", response_class=HTMLResponse)
@@ -452,21 +469,26 @@ async def signup(
 ):
     assert_valid_username(username)
     if not password or len(password) < 6:
-        return render_template(
-            "signup.html",
-            request,
-            {"error": "Password must be at least 6 characters long."},
+        return render_landing_error(
+            request, "Password must be at least 6 characters long.", username
         )
 
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
-            if cursor.fetchone():
-                return render_template(
-                    "signup.html",
+            cursor.execute(
+                "SELECT id, password_hash FROM users WHERE username = %s", (username,)
+            )
+            row = cursor.fetchone()
+
+            if row:
+                existing_id, password_hash = row
+                if password_hash and verify_password(password, password_hash):
+                    return login_and_redirect(request, existing_id)
+                return render_landing_error(
                     request,
-                    {"error": "Username already taken."},
+                    "Username already has a password. Enter the correct password to sign in.",
+                    username,
                 )
 
             password_hash = hash_password(password)
@@ -479,17 +501,12 @@ async def signup(
     finally:
         conn.close()
 
-    session_id, _, new_cookie = ensure_session_tokens(request)
-    response = RedirectResponse("/", status_code=status.HTTP_302_FOUND)
-    set_session_cookie(response, user_id)
-    if new_cookie:
-        response.set_cookie("session_id", session_id, httponly=True, samesite="lax")
-    return response
+    return login_and_redirect(request, user_id)
 
 
 @app.get("/login", response_class=HTMLResponse)
-async def login_form(request: Request, current_user=Depends(get_current_user)):
-    return render_template("login.html", request, {"current_user": current_user})
+async def login_form(request: Request):
+    return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
 
 
 @app.post("/login", response_class=HTMLResponse)
@@ -504,23 +521,25 @@ async def login(request: Request, username: str = Form(...), password: str = For
             )
             row = cursor.fetchone()
 
-        if not row or not verify_password(password, row.get("password_hash")):
-            return render_template(
-                "login.html",
+        if not row:
+            return render_landing_error(
                 request,
-                {"error": "Invalid username or password."},
+                "No account found for that username. Enter a password on the landing page to create one.",
+                username,
+            )
+
+        if not verify_password(password, row.get("password_hash")):
+            return render_landing_error(
+                request,
+                "Incorrect password. Try again on the landing page.",
+                username,
             )
 
         user_id = row["id"]
     finally:
         conn.close()
 
-    session_id, _, new_cookie = ensure_session_tokens(request)
-    response = RedirectResponse("/", status_code=status.HTTP_302_FOUND)
-    set_session_cookie(response, user_id)
-    if new_cookie:
-        response.set_cookie("session_id", session_id, httponly=True, samesite="lax")
-    return response
+    return login_and_redirect(request, user_id)
 
 
 @app.get("/logout")
@@ -536,7 +555,7 @@ async def logout(request: Request):
 @app.get("/profile", response_class=HTMLResponse)
 async def profile(request: Request, current_user=Depends(get_current_user)):
     if not current_user:
-        return RedirectResponse("/login", status_code=status.HTTP_302_FOUND)
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
 
     conn = get_db_connection()
     try:
@@ -565,7 +584,7 @@ async def update_flag(
     current_user=Depends(get_current_user),
 ):
     if not current_user:
-        return RedirectResponse("/login", status_code=status.HTTP_302_FOUND)
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
 
     code = (country_code or "").strip().upper()
     if not re.match(r"^[A-Z]{2}$", code):

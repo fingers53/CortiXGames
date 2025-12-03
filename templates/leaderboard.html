@@ -34,18 +34,14 @@
     </style>
 </head>
 <body>
+    {% if current_user %}
     <div class="auth-bar">
-        {% if current_user %}
-            <span>Logged in as <strong>{{ current_user.username }}</strong></span>
-            <a href="/profile" class="auth-link">Profile</a>
-            <span class="auth-separator">|</span>
-            <a href="/logout" class="auth-link">Logout</a>
-        {% else %}
-            <a href="/login" class="auth-link">Log in</a>
-            <span class="auth-separator">|</span>
-            <a href="/signup" class="auth-link">Sign up</a>
-        {% endif %}
+        <span>Logged in as <strong>{{ current_user.username }}</strong></span>
+        <a href="/profile" class="auth-link">Profile</a>
+        <span class="auth-separator">|</span>
+        <a href="/logout" class="auth-link">Logout</a>
     </div>
+    {% endif %}
     <div class="container">
         <h1>Leaderboard</h1>
 

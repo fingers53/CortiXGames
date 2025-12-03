@@ -12,19 +12,15 @@
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 
-<body>
+<body data-logged-in="{{ 'true' if current_user else 'false' }}" data-prefill-username="{{ prefill_username or '' }}">
+    {% if current_user %}
     <div class="auth-bar">
-        {% if current_user %}
-            <span>Logged in as <strong>{{ current_user.username }}</strong></span>
-            <a href="/profile" class="auth-link">Profile</a>
-            <span class="auth-separator">|</span>
-            <a href="/logout" class="auth-link">Logout</a>
-        {% else %}
-            <a href="/login" class="auth-link">Log in</a>
-            <span class="auth-separator">|</span>
-            <a href="/signup" class="auth-link">Sign up</a>
-        {% endif %}
+        <span>Logged in as <strong>{{ current_user.username }}</strong></span>
+        <a href="/profile" class="auth-link">Profile</a>
+        <span class="auth-separator">|</span>
+        <a href="/logout" class="auth-link">Logout</a>
     </div>
+    {% endif %}
     <div class="container">
         <div class="title">
             <h1>CORTI<span class="emphasize">X</span>Games</h1>
@@ -45,7 +41,9 @@
                 </form>
             </div>
         </div>
-
+        {% if error %}
+        <div class="auth-note auth-error">{{ error }}</div>
+        {% endif %}
         <div class="auth-note">
             Guest scores stay on this browser. Create a username and password to keep your scores everywhere.
         </div>

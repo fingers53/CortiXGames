@@ -10,18 +10,23 @@
     <link rel="stylesheet" href="/static/reaction_game.css">
 </head>
 <body>
+    {% if current_user %}
     <div class="auth-bar">
-        {% if current_user %}
-            <span>Logged in as <strong>{{ current_user.username }}</strong></span>
-            <a href="/profile" class="auth-link">Profile</a>
-            <span class="auth-separator">|</span>
-            <a href="/logout" class="auth-link">Logout</a>
-        {% else %}
-            <a href="/login" class="auth-link">Log in</a>
-            <span class="auth-separator">|</span>
-            <a href="/signup" class="auth-link">Sign up</a>
-        {% endif %}
+        <span>Logged in as <strong>{{ current_user.username }}</strong></span>
+        <a href="/profile" class="auth-link">Profile</a>
+        <span class="auth-separator">|</span>
+        <a href="/logout" class="auth-link">Logout</a>
     </div>
+    {% else %}
+    <div class="inline-upgrade" id="inline-upgrade">
+        <div class="inline-upgrade-text">Add a password to save your scores and unlock your profile.</div>
+        <form method="POST" action="/signup" class="inline-upgrade-form">
+            <input type="hidden" name="username" id="inline-upgrade-username" />
+            <input type="password" name="password" placeholder="Enter a password" minlength="6" required />
+            <button type="submit">Save my scores</button>
+        </form>
+    </div>
+    {% endif %}
     <div id="instruction-box" class="instruction-box">
         <h2>Reaction Game Instructions</h2>
         <p>Place your hands on the 0 and 1 keys.</p>
@@ -63,6 +68,20 @@
         <button onclick="window.location.href='/leaderboard/reaction-game'">Leaderboard</button>
     </div>
 
+    <script>
+        (function () {
+            const upgrade = document.getElementById("inline-upgrade");
+            const usernameField = document.getElementById("inline-upgrade-username");
+            const saved = localStorage.getItem("username") || "";
+            const usernameRegex = /^[A-Za-z0-9_]{3,20}$/;
+            if (upgrade && usernameField && usernameRegex.test(saved)) {
+                upgrade.style.display = "flex";
+                usernameField.value = saved;
+            } else if (upgrade) {
+                upgrade.style.display = "none";
+            }
+        })();
+    </script>
     <script src="/static/reaction_game.js"></script>
     <script>
         {% if current_user %}

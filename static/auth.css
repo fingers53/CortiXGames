@@ -39,6 +39,49 @@ body {
     color: #9CA3AF;
 }
 
+.inline-upgrade {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #eef2ff;
+    border-bottom: 1px solid #dbeafe;
+    flex-wrap: wrap;
+}
+
+.inline-upgrade-text {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.inline-upgrade-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.inline-upgrade-form input[type="password"] {
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    min-width: 200px;
+}
+
+.inline-upgrade-form button {
+    background: #2563EB;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.inline-upgrade-form button:hover {
+    background: #1d4ed8;
+}
+
 .auth-form {
     max-width: 420px;
     width: calc(100% - 32px);
@@ -105,6 +148,12 @@ body {
     background: #f3f4f6;
     padding: 10px 12px;
     border-radius: 6px;
+}
+
+.auth-error {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
 }
 
 .profile-card h2 {

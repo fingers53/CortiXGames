@@ -1,4 +1,7 @@
 const USERNAME_KEY = "username";
+const bodyEl = document.body;
+const isLoggedIn = (bodyEl?.dataset?.loggedIn || "false") === "true";
+const prefillUsername = bodyEl?.dataset?.prefillUsername || "";
 const bestReaction = document.getElementById("best-reaction");
 const bestMemory = document.getElementById("best-memory");
 const bestScoresContainer = document.getElementById("best-scores");
@@ -8,6 +11,11 @@ const passwordUsernameInput = document.getElementById("password-username");
 function togglePasswordUpgrade(username) {
     const valid = validateUsername(username || "");
     if (!passwordUpgrade) return;
+
+    if (isLoggedIn) {
+        passwordUpgrade.style.display = "none";
+        return;
+    }
 
     if (valid) {
         passwordUpgrade.style.display = "block";
@@ -80,7 +88,11 @@ function attachNavigation(buttonId, path) {
 function hydrateUsernameField() {
     const usernameInput = document.getElementById("username");
     const enterButton = document.getElementById("enter-button");
-    const savedUsername = getSavedUsername();
+    if (!getSavedUsername() && validateUsername(prefillUsername || "")) {
+        localStorage.setItem(USERNAME_KEY, prefillUsername);
+    }
+
+    const savedUsername = getSavedUsername() || prefillUsername;
 
     if (!usernameInput) return;
 

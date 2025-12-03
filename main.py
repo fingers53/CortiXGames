@@ -291,6 +291,124 @@ def fetch_recent_attempts(conn, user_id: int) -> List[dict]:
         return cursor.fetchall()
 
 
+def fetch_reaction_insights(conn, user_id: int) -> dict:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+        cursor.execute(
+            """
+            SELECT score, average_time_ms, accuracy
+            FROM reaction_scores
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 25
+            """,
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+
+    if not rows:
+        return {
+            "best_score": None,
+            "average_time_ms": None,
+            "accuracy": None,
+            "cognitive_score": None,
+            "strengths": ["Play a round to unlock insights."],
+            "weaknesses": [],
+        }
+
+    scores = [r["score"] for r in rows]
+    avg_time = sum(r["average_time_ms"] for r in rows) / len(rows)
+    avg_accuracy = sum(r["accuracy"] for r in rows) / len(rows)
+    best_score = max(scores)
+
+    time_factor = max(0.25, min(1.0, 380.0 / max(avg_time, 1)))
+    cognitive_score = int(round((avg_accuracy * 0.6 + time_factor * 0.4) * 100))
+
+    strengths = []
+    weaknesses = []
+    if avg_accuracy >= 0.9:
+        strengths.append("Precise clicking accuracy")
+    elif avg_accuracy < 0.8:
+        weaknesses.append("Accuracy drops on harder rounds")
+
+    if avg_time <= 260:
+        strengths.append("Lightning-fast reactions")
+    elif avg_time > 420:
+        weaknesses.append("Improve reaction speed under pressure")
+
+    if not strengths:
+        strengths.append("Steady performance across attempts")
+
+    return {
+        "best_score": best_score,
+        "average_time_ms": round(avg_time, 1),
+        "accuracy": round(avg_accuracy * 100, 1),
+        "cognitive_score": cognitive_score,
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+    }
+
+
+def fetch_memory_insights(conn, user_id: int) -> dict:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+        cursor.execute(
+            """
+            SELECT total_score, round1_score, round2_score, round3_score
+            FROM memory_scores
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 25
+            """,
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+
+    if not rows:
+        return {
+            "best_total": None,
+            "average_total": None,
+            "round_averages": None,
+            "cognitive_score": None,
+            "strengths": ["Play a memory round to see insights."],
+            "weaknesses": [],
+        }
+
+    totals = [r["total_score"] for r in rows]
+    best_total = max(totals)
+    avg_total = sum(totals) / len(totals)
+
+    r1_avg = sum((r["round1_score"] or 0) for r in rows) / len(rows)
+    r2_avg = sum((r["round2_score"] or 0) for r in rows) / len(rows)
+    r3_avg = sum((r["round3_score"] or 0) for r in rows) / len(rows)
+    round_avgs = {1: round(r1_avg, 2), 2: round(r2_avg, 2), 3: round(r3_avg, 2)}
+
+    normalized_total = min(100.0, max(0.0, (avg_total / 30.0) * 100.0))
+    peak_bonus = min(10.0, best_total)
+    cognitive_score = int(round(normalized_total + peak_bonus))
+
+    strengths = []
+    weaknesses = []
+    best_round = max(round_avgs, key=round_avgs.get)
+    weakest_round = min(round_avgs, key=round_avgs.get)
+
+    strengths.append(f"Strongest in round {best_round} patterns")
+    if round_avgs[weakest_round] < round_avgs[best_round]:
+        weaknesses.append(f"Round {weakest_round} needs more repetition")
+
+    if avg_total >= best_total * 0.9:
+        strengths.append("Consistent memory recall")
+    elif avg_total < best_total * 0.6:
+        weaknesses.append("Work on sustaining peak memory scores")
+
+    return {
+        "best_total": round(best_total, 2),
+        "average_total": round(avg_total, 2),
+        "round_averages": round_avgs,
+        "cognitive_score": cognitive_score,
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request, current_user=Depends(get_current_user)):
     return render_template("landing_page.html", request, {"current_user": current_user})
@@ -423,13 +541,20 @@ async def profile(request: Request, current_user=Depends(get_current_user)):
     conn = get_db_connection()
     try:
         attempts = fetch_recent_attempts(conn, current_user["id"])
+        reaction_insights = fetch_reaction_insights(conn, current_user["id"])
+        memory_insights = fetch_memory_insights(conn, current_user["id"])
     finally:
         conn.close()
 
     return render_template(
         "profile.html",
         request,
-        {"current_user": current_user, "attempts": attempts},
+        {
+            "current_user": current_user,
+            "attempts": attempts,
+            "reaction_insights": reaction_insights,
+            "memory_insights": memory_insights,
+        },
     )
 
 
@@ -447,6 +572,8 @@ async def update_flag(
         conn = get_db_connection()
         try:
             attempts = fetch_recent_attempts(conn, current_user["id"])
+            reaction_insights = fetch_reaction_insights(conn, current_user["id"])
+            memory_insights = fetch_memory_insights(conn, current_user["id"])
         finally:
             conn.close()
         return render_template(
@@ -455,6 +582,8 @@ async def update_flag(
             {
                 "current_user": current_user,
                 "attempts": attempts,
+                "reaction_insights": reaction_insights,
+                "memory_insights": memory_insights,
                 "error": "Please provide a two-letter country code (e.g., US, GB).",
             },
         )
@@ -468,6 +597,8 @@ async def update_flag(
             )
         conn.commit()
         attempts = fetch_recent_attempts(conn, current_user["id"])
+        reaction_insights = fetch_reaction_insights(conn, current_user["id"])
+        memory_insights = fetch_memory_insights(conn, current_user["id"])
     finally:
         conn.close()
 
@@ -479,6 +610,8 @@ async def update_flag(
         {
             "current_user": updated_user,
             "attempts": attempts,
+            "reaction_insights": reaction_insights,
+            "memory_insights": memory_insights,
             "message": "Flag updated for your account.",
         },
     )

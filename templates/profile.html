@@ -45,25 +45,99 @@
             <div class="notice error">{{ error }}</div>
         {% endif %}
 
+        <div class="insight-grid">
+            <div class="insight-card">
+                <div class="insight-header">
+                    <div>
+                        <div class="muted">Reaction game</div>
+                        <h3>Cognitive score</h3>
+                    </div>
+                    <div class="score-pill">{{ reaction_insights.cognitive_score or '—' }}</div>
+                </div>
+                <div class="insight-body">
+                    <p class="muted">Best score: {{ reaction_insights.best_score or '—' }}</p>
+                    <p class="muted">Avg. accuracy: {{ reaction_insights.accuracy or '—' }}{% if reaction_insights.accuracy %}%{% endif %} | Avg. time: {{ reaction_insights.average_time_ms or '—' }}{% if reaction_insights.average_time_ms %} ms{% endif %}</p>
+                    <div class="list-block">
+                        <div>
+                            <div class="muted">Strengths</div>
+                            <ul>
+                                {% for item in reaction_insights.strengths %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% if reaction_insights.weaknesses %}
+                        <div>
+                            <div class="muted">Needs work</div>
+                            <ul>
+                                {% for item in reaction_insights.weaknesses %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="insight-card">
+                <div class="insight-header">
+                    <div>
+                        <div class="muted">Memory game</div>
+                        <h3>Cognitive score</h3>
+                    </div>
+                    <div class="score-pill">{{ memory_insights.cognitive_score or '—' }}</div>
+                </div>
+                <div class="insight-body">
+                    <p class="muted">Best total: {{ memory_insights.best_total or '—' }} | Avg. total: {{ memory_insights.average_total or '—' }}</p>
+                    {% if memory_insights.round_averages %}
+                    <p class="muted">Round avgs — R1: {{ memory_insights.round_averages[1] }}, R2: {{ memory_insights.round_averages[2] }}, R3: {{ memory_insights.round_averages[3] }}</p>
+                    {% endif %}
+                    <div class="list-block">
+                        <div>
+                            <div class="muted">Strengths</div>
+                            <ul>
+                                {% for item in memory_insights.strengths %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% if memory_insights.weaknesses %}
+                        <div>
+                            <div class="muted">Needs work</div>
+                            <ul>
+                                {% for item in memory_insights.weaknesses %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
         {% if attempts %}
-            <table class="attempt-table">
-                <thead>
-                    <tr>
-                        <th>Game</th>
-                        <th>Score</th>
-                        <th>When</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for attempt in attempts %}
+            <div class="table-wrapper">
+                <table class="attempt-table">
+                    <thead>
                         <tr>
-                            <td>{{ attempt.game | capitalize }}</td>
-                            <td>{{ attempt.score }}</td>
-                            <td>{{ attempt.created_at }}</td>
+                            <th>Game</th>
+                            <th>Score</th>
+                            <th>When</th>
                         </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {% for attempt in attempts %}
+                            <tr>
+                                <td>{{ attempt.game | capitalize }}</td>
+                                <td>{{ attempt.score }}</td>
+                                <td>{{ attempt.created_at }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         {% else %}
             <p class="muted">No attempts recorded yet. Play a game to see your history.</p>
         {% endif %}

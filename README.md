@@ -1,6 +1,6 @@
-# Quanty JavaScript Games
+# CortiXGames
 
-Small browser-based brain games backed by a FastAPI API and a SQLite leaderboard.  
+Small browser-based brain games backed by a FastAPI API and a Supabase Postgres database that acts as a leaderboard.  
 Built mainly as a portfolio / CV piece and as a playground for async + JS game logic.
 
 You (future you) will probably have forgotten all of this, so here’s how it works and how to get it running again without wanting to delete the repo.

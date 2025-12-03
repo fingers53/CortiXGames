@@ -2,6 +2,25 @@ const USERNAME_KEY = "username";
 const bestReaction = document.getElementById("best-reaction");
 const bestMemory = document.getElementById("best-memory");
 const bestScoresContainer = document.getElementById("best-scores");
+const passwordUpgrade = document.getElementById("password-upgrade");
+const passwordUsernameInput = document.getElementById("password-username");
+
+function togglePasswordUpgrade(username) {
+    const valid = validateUsername(username || "");
+    if (!passwordUpgrade) return;
+
+    if (valid) {
+        passwordUpgrade.style.display = "block";
+        if (passwordUsernameInput) {
+            passwordUsernameInput.value = username;
+        }
+    } else {
+        passwordUpgrade.style.display = "none";
+        if (passwordUsernameInput) {
+            passwordUsernameInput.value = "";
+        }
+    }
+}
 
 function validateUsername(name) {
     const usernameRegex = /^[A-Za-z0-9_]{3,20}$/;
@@ -24,6 +43,8 @@ function confirmUsername() {
     usernameInput.disabled = true;
     usernameInput.style.backgroundColor = "#f0f0f0";
     usernameInput.style.color = "#555";
+
+    togglePasswordUpgrade(chosen);
 
     if (enterButton) {
         enterButton.style.display = "none";
@@ -71,6 +92,7 @@ function hydrateUsernameField() {
         if (enterButton) {
             enterButton.style.display = "none";
         }
+        togglePasswordUpgrade(savedUsername);
         // we *might* have scores; fetch them and show container only if they exist
         fetchBestScores();
     } else {
@@ -78,6 +100,7 @@ function hydrateUsernameField() {
         if (bestScoresContainer) {
             bestScoresContainer.style.display = "none";
         }
+        togglePasswordUpgrade("");
     }
 }
 

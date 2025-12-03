@@ -36,6 +36,14 @@
                 <input type="text" id="username" class="username-input" placeholder="Write a username" />
                 <button id="enter-button" onclick="confirmUsername()">Enter</button>
             </div>
+            <div id="password-upgrade" class="password-upgrade" style="display: none;">
+                <div class="password-title">Enter a password to save your scores :)</div>
+                <form id="password-upgrade-form" method="POST" action="/signup" class="password-form">
+                    <input type="hidden" name="username" id="password-username" />
+                    <input type="password" name="password" id="password" class="password-input" placeholder="Enter a password to save your scores :)" minlength="6" />
+                    <button type="submit" class="password-button">Save my scores</button>
+                </form>
+            </div>
         </div>
 
         <div class="auth-note">

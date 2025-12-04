@@ -2,29 +2,41 @@ import os
 import re
 import secrets
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import psycopg2
 import psycopg2.extras
 import requests
 from dotenv import load_dotenv
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from passlib.context import CryptContext
 
 from scoring import calculate_reaction_game_score
 
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
+SESSION_COOKIE_NAME = "session_user_id"
+SESSION_COOKIE_NAME = "session_user_id"
+
+# Short vs long sessions
+SESSION_MAX_AGE_SHORT = 60 * 60 * 12          # 12 hours
+SESSION_MAX_AGE_LONG = 60 * 60 * 24 * 30      # 30 days
+
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
 
 csrf_sessions: Dict[str, str] = {}
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,20}$")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def get_db_connection():
     if not DATABASE_URL:
@@ -67,6 +79,19 @@ def get_country_code_from_ip(client_ip: str | None) -> str:
     return "??"
 
 
+def hash_password(password: str) -> str:
+    # DEBUG
+    print(f"DEBUG password={repr(password)} len={len(password)} bytes={len(password.encode('utf-8'))}")
+    return pwd_context.hash(password)
+
+
+
+def verify_password(password: str, password_hash: str | None) -> bool:
+    if not password_hash:
+        return False
+    return pwd_context.verify(password, password_hash)
+
+
 def get_or_create_user(conn, username: str, country_code: str | None) -> int:
     """
     Find an existing user by username or create a new one.
@@ -103,6 +128,16 @@ def get_or_create_user(conn, username: str, country_code: str | None) -> int:
         return user_id
 
 
+def get_user_by_id(conn, user_id: int) -> Optional[dict]:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+        cursor.execute(
+            "SELECT id, username, country_code, password_hash FROM users WHERE id = %s",
+            (user_id,),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
 
 
 def ensure_session_tokens(request: Request):
@@ -121,10 +156,61 @@ def ensure_session_tokens(request: Request):
     return session_id, csrf_token, new_cookie
 
 
-def render_template(file_name: str, request: Request) -> HTMLResponse:
+def set_session_cookie(response, user_id: int, remember: bool):
+    max_age = SESSION_MAX_AGE_LONG if remember else SESSION_MAX_AGE_SHORT
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        str(user_id),
+        httponly=True,
+        max_age=max_age,
+        samesite="lax",
+        secure=SESSION_COOKIE_SECURE,
+    )
+
+
+
+def clear_session_cookie(response):
+    response.delete_cookie(
+        SESSION_COOKIE_NAME,
+        httponly=True,
+        samesite="lax",
+        secure=SESSION_COOKIE_SECURE,
+    )
+
+
+def get_current_user_from_request(request: Request) -> Optional[dict]:
+    raw_id = request.cookies.get(SESSION_COOKIE_NAME)
+    if not raw_id:
+        return None
+
+    try:
+        user_id = int(raw_id)
+    except ValueError:
+        return None
+
+    conn = get_db_connection()
+    try:
+        return get_user_by_id(conn, user_id)
+    finally:
+        conn.close()
+
+
+async def get_current_user(request: Request) -> Optional[dict]:
+    return get_current_user_from_request(request)
+
+
+def render_template(
+    file_name: str, request: Request, context: Optional[dict] = None
+) -> HTMLResponse:
     session_id, csrf_token, new_cookie = ensure_session_tokens(request)
-    content = read_html(file_name).replace("{{ csrf_token }}", csrf_token)
-    response = HTMLResponse(content=content)
+    base_context = {
+        "request": request,
+        "csrf_token": csrf_token,
+    }
+    if context:
+        base_context.update(context)
+
+    response = templates.TemplateResponse(file_name, base_context)
     if new_cookie:
         response.set_cookie("session_id", session_id, httponly=True, samesite="lax")
     return response
@@ -179,45 +265,414 @@ def compute_memory_scores(question_log: List[Dict]) -> tuple[float, float, float
     return total, r1, r2, r3
 
 
+def resolve_user_id(
+    conn, current_user: Optional[dict], username: Optional[str], country_code: str | None
+) -> int:
+    if current_user:
+        user_id = current_user["id"]
+        if country_code and country_code != current_user.get("country_code"):
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE users SET country_code = %s WHERE id = %s",
+                    (country_code, user_id),
+                )
+        return user_id
+
+    assert_valid_username(username or "")
+    return get_or_create_user(conn, username, country_code)
+
+
+def fetch_recent_attempts(conn, user_id: int) -> List[dict]:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+        cursor.execute(
+            """
+            SELECT 'reaction' AS game, score AS score, created_at
+            FROM reaction_scores
+            WHERE user_id = %s
+            UNION ALL
+            SELECT 'memory' AS game, total_score AS score, created_at
+            FROM memory_scores
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 20
+            """,
+            (user_id, user_id),
+        )
+        return cursor.fetchall()
+
+
+def fetch_reaction_insights(conn, user_id: int) -> dict:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+        cursor.execute(
+            """
+            SELECT score, average_time_ms, accuracy
+            FROM reaction_scores
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 25
+            """,
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+
+    if not rows:
+        return {
+            "best_score": None,
+            "average_time_ms": None,
+            "accuracy": None,
+            "cognitive_score": None,
+            "strengths": ["Play a round to unlock insights."],
+            "weaknesses": [],
+        }
+
+    scores = [r["score"] for r in rows]
+    avg_time = sum(r["average_time_ms"] for r in rows) / len(rows)
+    avg_accuracy = sum(r["accuracy"] for r in rows) / len(rows)
+    best_score = max(scores)
+
+    time_factor = max(0.25, min(1.0, 380.0 / max(avg_time, 1)))
+    cognitive_score = int(round((avg_accuracy * 0.6 + time_factor * 0.4) * 100))
+
+    strengths = []
+    weaknesses = []
+    if avg_accuracy >= 0.9:
+        strengths.append("Precise clicking accuracy")
+    elif avg_accuracy < 0.8:
+        weaknesses.append("Accuracy drops on harder rounds")
+
+    if avg_time <= 260:
+        strengths.append("Lightning-fast reactions")
+    elif avg_time > 420:
+        weaknesses.append("Improve reaction speed under pressure")
+
+    if not strengths:
+        strengths.append("Steady performance across attempts")
+
+    return {
+        "best_score": best_score,
+        "average_time_ms": round(avg_time, 1),
+        "accuracy": round(avg_accuracy * 100, 1),
+        "cognitive_score": cognitive_score,
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+    }
+
+
+def fetch_memory_insights(conn, user_id: int) -> dict:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+        cursor.execute(
+            """
+            SELECT total_score, round1_score, round2_score, round3_score
+            FROM memory_scores
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 25
+            """,
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+
+    if not rows:
+        return {
+            "best_total": None,
+            "average_total": None,
+            "round_averages": None,
+            "cognitive_score": None,
+            "strengths": ["Play a memory round to see insights."],
+            "weaknesses": [],
+        }
+
+    totals = [r["total_score"] for r in rows]
+    best_total = max(totals)
+    avg_total = sum(totals) / len(totals)
+
+    r1_avg = sum((r["round1_score"] or 0) for r in rows) / len(rows)
+    r2_avg = sum((r["round2_score"] or 0) for r in rows) / len(rows)
+    r3_avg = sum((r["round3_score"] or 0) for r in rows) / len(rows)
+    round_avgs = {1: round(r1_avg, 2), 2: round(r2_avg, 2), 3: round(r3_avg, 2)}
+
+    normalized_total = min(100.0, max(0.0, (avg_total / 30.0) * 100.0))
+    peak_bonus = min(10.0, best_total)
+    cognitive_score = int(round(normalized_total + peak_bonus))
+
+    strengths = []
+    weaknesses = []
+    best_round = max(round_avgs, key=round_avgs.get)
+    weakest_round = min(round_avgs, key=round_avgs.get)
+
+    strengths.append(f"Strongest in round {best_round} patterns")
+    if round_avgs[weakest_round] < round_avgs[best_round]:
+        weaknesses.append(f"Round {weakest_round} needs more repetition")
+
+    if avg_total >= best_total * 0.9:
+        strengths.append("Consistent memory recall")
+    elif avg_total < best_total * 0.6:
+        weaknesses.append("Work on sustaining peak memory scores")
+
+    return {
+        "best_total": round(best_total, 2),
+        "average_total": round(avg_total, 2),
+        "round_averages": round_avgs,
+        "cognitive_score": cognitive_score,
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
-async def landing_page(request: Request):
-    return render_template("landing_page.html", request)
+async def landing_page(request: Request, current_user=Depends(get_current_user)):
+    return render_template("landing_page.html", request, {"current_user": current_user})
 
 
 @app.get("/memory-game", response_class=HTMLResponse)
-async def memory_game(request: Request):
-    return render_template("memory_game.html", request)
+async def memory_game(request: Request, current_user=Depends(get_current_user)):
+    return render_template("memory_game.html", request, {"current_user": current_user})
 
 
 @app.get("/reaction-game", response_class=HTMLResponse)
-async def reaction_game(request: Request):
-    return render_template("reaction_game.html", request)
+async def reaction_game(request: Request, current_user=Depends(get_current_user)):
+    return render_template("reaction_game.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard", response_class=HTMLResponse)
-async def leaderboard(request: Request):
-    return render_template("leaderboard.html", request)
+async def leaderboard(request: Request, current_user=Depends(get_current_user)):
+    return render_template("leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/reaction-game", response_class=HTMLResponse)
-async def reaction_game_leaderboard(request: Request):
-    return render_template("reaction_leaderboard.html", request)
+async def reaction_game_leaderboard(request: Request, current_user=Depends(get_current_user)):
+    return render_template("reaction_leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/memory-game", response_class=HTMLResponse)
-async def memory_game_leaderboard(request: Request):
-    return render_template("memory_leaderboard.html", request)
+async def memory_game_leaderboard(request: Request, current_user=Depends(get_current_user)):
+    return render_template("memory_leaderboard.html", request, {"current_user": current_user})
+
+
+@app.get("/signup", response_class=HTMLResponse)
+async def signup_form(request: Request):
+    return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+
+
+def render_landing_error(request: Request, message: str, username: str):
+    return render_template(
+        "landing_page.html",
+        request,
+        {"error": message, "prefill_username": username, "current_user": None},
+    )
+
+
+def login_and_redirect(request: Request, user_id: int, remember: bool):
+    session_id, _, new_cookie = ensure_session_tokens(request)
+    response = RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+    set_session_cookie(response, user_id, remember)
+    if new_cookie:
+        response.set_cookie("session_id", session_id, httponly=True, samesite="lax")
+    return response
+
+
+
+@app.post("/signup", response_class=HTMLResponse)
+async def signup(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    remember_me: str | None = Form(None),
+):
+
+    assert_valid_username(username)
+    if not password or len(password) < 6:
+        return render_landing_error(
+            request, "Password must be at least 6 characters long.", username
+        )
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT id, password_hash FROM users WHERE username = %s", (username,)
+            )
+            row = cursor.fetchone()
+
+            if row:
+                existing_id, password_hash = row
+                if password_hash and verify_password(password, password_hash):
+                    remember = (remember_me == "1")
+                    return login_and_redirect(request, existing_id, remember)
+                return render_landing_error(
+                    request,
+                    "Username already has a password. Enter the correct password to sign in.",
+                    username,
+                )
+
+
+            password_hash = hash_password(password)
+            cursor.execute(
+                "INSERT INTO users (username, country_code, password_hash) VALUES (%s, %s, %s) RETURNING id",
+                (username, "??", password_hash),
+            )
+            user_id = cursor.fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+
+    remember = (remember_me == "1")
+    return login_and_redirect(request, user_id, remember)
+
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request):
+    return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+
+
+@app.post("/login", response_class=HTMLResponse)
+async def login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    remember_me: str | None = Form(None),
+):
+
+    assert_valid_username(username)
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+            cursor.execute(
+                "SELECT id, password_hash FROM users WHERE username = %s",
+                (username,),
+            )
+            row = cursor.fetchone()
+
+        if not row:
+            return render_landing_error(
+                request,
+                "No account found for that username. Enter a password on the landing page to create one.",
+                username,
+            )
+
+        if not verify_password(password, row.get("password_hash")):
+            return render_landing_error(
+                request,
+                "Incorrect password. Try again on the landing page.",
+                username,
+            )
+
+        user_id = row["id"]
+    finally:
+        conn.close()
+
+    remember = (remember_me == "1")
+    return login_and_redirect(request, user_id, remember)
+
+
+
+@app.get("/logout")
+async def logout(request: Request):
+    session_id, _, new_cookie = ensure_session_tokens(request)
+    response = RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+    clear_session_cookie(response)
+    if new_cookie:
+        response.set_cookie("session_id", session_id, httponly=True, samesite="lax")
+    return response
+
+
+@app.get("/profile", response_class=HTMLResponse)
+async def profile(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+
+    conn = get_db_connection()
+    try:
+        attempts = fetch_recent_attempts(conn, current_user["id"])
+        reaction_insights = fetch_reaction_insights(conn, current_user["id"])
+        memory_insights = fetch_memory_insights(conn, current_user["id"])
+    finally:
+        conn.close()
+
+    return render_template(
+        "profile.html",
+        request,
+        {
+            "current_user": current_user,
+            "attempts": attempts,
+            "reaction_insights": reaction_insights,
+            "memory_insights": memory_insights,
+        },
+    )
+
+
+@app.post("/profile/flag", response_class=HTMLResponse)
+async def update_flag(
+    request: Request,
+    country_code: str = Form(...),
+    current_user=Depends(get_current_user),
+):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+
+    code = (country_code or "").strip().upper()
+    if not re.match(r"^[A-Z]{2}$", code):
+        conn = get_db_connection()
+        try:
+            attempts = fetch_recent_attempts(conn, current_user["id"])
+            reaction_insights = fetch_reaction_insights(conn, current_user["id"])
+            memory_insights = fetch_memory_insights(conn, current_user["id"])
+        finally:
+            conn.close()
+        return render_template(
+            "profile.html",
+            request,
+            {
+                "current_user": current_user,
+                "attempts": attempts,
+                "reaction_insights": reaction_insights,
+                "memory_insights": memory_insights,
+                "error": "Please provide a two-letter country code (e.g., US, GB).",
+            },
+        )
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "UPDATE users SET country_code = %s WHERE id = %s",
+                (code, current_user["id"]),
+            )
+        conn.commit()
+        attempts = fetch_recent_attempts(conn, current_user["id"])
+        reaction_insights = fetch_reaction_insights(conn, current_user["id"])
+        memory_insights = fetch_memory_insights(conn, current_user["id"])
+    finally:
+        conn.close()
+
+    updated_user = dict(current_user)
+    updated_user["country_code"] = code
+    return render_template(
+        "profile.html",
+        request,
+        {
+            "current_user": updated_user,
+            "attempts": attempts,
+            "reaction_insights": reaction_insights,
+            "memory_insights": memory_insights,
+            "message": "Flag updated for your account.",
+        },
+    )
 
 
 @app.post("/reaction-game/submit_score")
-async def submit_reaction_score(request: Request, _=Depends(csrf_protected)):
+async def submit_reaction_score(
+    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+):
     data = await request.json()
     username = data.get("username")
     country_input = data.get("country") or data.get("countryCode")
     score_data = data.get("scoreData") or {}
     answer_record = score_data.get("answerRecord") or []
 
-    assert_valid_username(username)
+    if not current_user:
+        assert_valid_username(username)
     validate_answer_record(answer_record)
 
     score_result = calculate_reaction_game_score(answer_record)
@@ -230,7 +685,7 @@ async def submit_reaction_score(request: Request, _=Depends(csrf_protected)):
 
     conn = get_db_connection()
     try:
-        user_id = get_or_create_user(conn, username, country_code)
+        user_id = resolve_user_id(conn, current_user, username, country_code)
         created_at = datetime.utcnow().isoformat()
         with conn.cursor() as cursor:
             cursor.execute(
@@ -259,13 +714,16 @@ async def submit_reaction_score(request: Request, _=Depends(csrf_protected)):
 
 
 @app.post("/memory-game/submit_score")
-async def submit_memory_score(request: Request, _=Depends(csrf_protected)):
+async def submit_memory_score(
+    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+):
     data = await request.json()
     username = data.get("username")
     country_input = data.get("country") or data.get("countryCode")
     question_log = data.get("questionLog") or []
 
-    assert_valid_username(username)
+    if not current_user:
+        assert_valid_username(username)
 
     if not isinstance(question_log, list) or not (1 <= len(question_log) <= 200):
         raise HTTPException(status_code=422, detail="Invalid question log length")
@@ -291,7 +749,7 @@ async def submit_memory_score(request: Request, _=Depends(csrf_protected)):
 
     conn = get_db_connection()
     try:
-        user_id = get_or_create_user(conn, username, country_code)
+        user_id = resolve_user_id(conn, current_user, username, country_code)
         created_at = datetime.utcnow().isoformat()
         with conn.cursor() as cursor:
             cursor.execute(

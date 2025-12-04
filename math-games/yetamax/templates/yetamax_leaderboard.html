@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yetamax Leaderboard</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/auth.css">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/math-games/yetamax/static/css/yetamax.css">
+</head>
+<body>
+    {% if current_user %}
+    <div class="auth-bar">
+        <span>Logged in as <strong>{{ current_user.username }}</strong></span>
+        <a href="/profile" class="auth-link">Profile</a>
+        <span class="auth-separator">|</span>
+        <a href="/logout" class="auth-link">Logout</a>
+    </div>
+    {% endif %}
+
+    <div class="yetamax-container">
+        <header class="yetamax-header">
+            <div>
+                <h1>Yetamax Leaderboard</h1>
+                <p class="subtitle">Top 20 valid runs</p>
+            </div>
+            <div class="actions">
+                <a class="link" href="/math-game/yetamax">Play</a>
+                <a class="link" href="/math-game/yetamax/stats">Stats</a>
+            </div>
+        </header>
+
+        <section class="panel">
+            <table class="leaderboard-table">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Username</th>
+                        <th>Score</th>
+                        <th>Correct</th>
+                        <th>Wrong</th>
+                        <th>Avg time (ms)</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-body">
+                    <tr><td colspan="7">Loading...</td></tr>
+                </tbody>
+            </table>
+        </section>
+    </div>
+
+    <script>
+        fetch('/api/math-game/yetamax/leaderboard')
+            .then((resp) => resp.json())
+            .then((data) => {
+                const body = document.getElementById('leaderboard-body');
+                body.innerHTML = '';
+                const scores = data.scores || [];
+                if (!scores.length) {
+                    body.innerHTML = '<tr><td colspan="7">No scores yet.</td></tr>';
+                    return;
+                }
+                scores.forEach((row, idx) => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${idx + 1}</td>
+                        <td>${row.username}</td>
+                        <td>${row.score}</td>
+                        <td>${row.correct_count}</td>
+                        <td>${row.wrong_count}</td>
+                        <td>${row.avg_time_ms.toFixed(1)}</td>
+                        <td>${new Date(row.created_at).toLocaleString()}</td>
+                    `;
+                    body.appendChild(tr);
+                });
+            })
+            .catch(() => {
+                const body = document.getElementById('leaderboard-body');
+                body.innerHTML = '<tr><td colspan="7">Could not load leaderboard.</td></tr>';
+            });
+    </script>
+</body>
+</html>

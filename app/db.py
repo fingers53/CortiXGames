@@ -134,3 +134,55 @@ def ensure_math_session_scores_table():
         conn.commit()
     finally:
         conn.close()
+
+
+def ensure_user_profile_columns():
+    """Add optional profile columns to the users table if they are missing."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                ALTER TABLE public.users
+                    ADD COLUMN IF NOT EXISTS gender text,
+                    ADD COLUMN IF NOT EXISTS age_range text,
+                    ADD COLUMN IF NOT EXISTS handedness text,
+                    ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT true,
+                    ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+                """
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def ensure_achievements_tables():
+    """Create achievements tables if they do not exist."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS public.achievements (
+                    id serial PRIMARY KEY,
+                    code text UNIQUE NOT NULL,
+                    name text NOT NULL,
+                    description text NOT NULL,
+                    category text NOT NULL
+                );
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS public.user_achievements (
+                    id serial PRIMARY KEY,
+                    user_id integer NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+                    achievement_id integer NOT NULL REFERENCES public.achievements(id) ON DELETE CASCADE,
+                    earned_at timestamptz NOT NULL DEFAULT now(),
+                    UNIQUE (user_id, achievement_id)
+                );
+                """
+            )
+        conn.commit()
+    finally:
+        conn.close()

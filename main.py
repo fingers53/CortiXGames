@@ -8,6 +8,9 @@ import psycopg2
 import psycopg2.extras
 import requests
 from dotenv import load_dotenv
+from app.achievements import check_and_award_achievements, seed_achievements
+from app.db import ensure_achievements_tables, ensure_user_profile_columns
+from app.routers import profile as profile_router
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -188,6 +191,10 @@ def ensure_math_session_scores_table():
 # Ensure Round 2 and combined storage exist on startup
 ensure_maveric_scores_table()
 ensure_math_session_scores_table()
+ensure_user_profile_columns()
+ensure_achievements_tables()
+seed_achievements()
+app.include_router(profile_router.router)
 
 
 def read_html(file_name: str) -> str:
@@ -276,7 +283,10 @@ def get_or_create_user(conn, username: str, country_code: str | None) -> int:
 def get_user_by_id(conn, user_id: int) -> Optional[dict]:
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
         cursor.execute(
-            "SELECT id, username, country_code, password_hash FROM users WHERE id = %s",
+            """
+            SELECT id, username, country_code, password_hash, gender, age_range, handedness, is_public, created_at
+            FROM users WHERE id = %s
+            """,
             (user_id,),
         )
         row = cursor.fetchone()
@@ -830,96 +840,6 @@ async def logout(request: Request):
     return response
 
 
-@app.get("/profile", response_class=HTMLResponse)
-async def profile(request: Request, current_user=Depends(get_current_user)):
-    if not current_user:
-        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
-
-    conn = get_db_connection()
-    try:
-        attempts = fetch_recent_attempts(conn, current_user["id"])
-        reaction_insights = fetch_reaction_insights(conn, current_user["id"])
-        memory_insights = fetch_memory_insights(conn, current_user["id"])
-        math_insights = fetch_math_insights(conn, current_user["id"])
-    finally:
-        conn.close()
-
-    return render_template(
-        "profile.html",
-        request,
-        {
-            "current_user": current_user,
-            "attempts": attempts,
-            "reaction_insights": reaction_insights,
-            "memory_insights": memory_insights,
-            "math_insights": math_insights,
-        },
-    )
-
-
-@app.post("/profile/flag", response_class=HTMLResponse)
-async def update_flag(
-    request: Request,
-    country_code: str = Form(...),
-    current_user=Depends(get_current_user),
-):
-    if not current_user:
-        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
-
-    code = (country_code or "").strip().upper()
-    if not re.match(r"^[A-Z]{2}$", code):
-        conn = get_db_connection()
-        try:
-            attempts = fetch_recent_attempts(conn, current_user["id"])
-            reaction_insights = fetch_reaction_insights(conn, current_user["id"])
-            memory_insights = fetch_memory_insights(conn, current_user["id"])
-            math_insights = fetch_math_insights(conn, current_user["id"])
-        finally:
-            conn.close()
-        return render_template(
-            "profile.html",
-            request,
-            {
-                "current_user": current_user,
-                "attempts": attempts,
-                "reaction_insights": reaction_insights,
-                "memory_insights": memory_insights,
-                "math_insights": math_insights,
-                "error": "Please provide a two-letter country code (e.g., US, GB).",
-            },
-        )
-
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                "UPDATE users SET country_code = %s WHERE id = %s",
-                (code, current_user["id"]),
-            )
-        conn.commit()
-        attempts = fetch_recent_attempts(conn, current_user["id"])
-        reaction_insights = fetch_reaction_insights(conn, current_user["id"])
-        memory_insights = fetch_memory_insights(conn, current_user["id"])
-        math_insights = fetch_math_insights(conn, current_user["id"])
-    finally:
-        conn.close()
-
-    updated_user = dict(current_user)
-    updated_user["country_code"] = code
-    return render_template(
-        "profile.html",
-        request,
-        {
-            "current_user": updated_user,
-            "attempts": attempts,
-            "reaction_insights": reaction_insights,
-            "memory_insights": memory_insights,
-            "math_insights": math_insights,
-            "message": "Flag updated for your account.",
-        },
-    )
-
-
 @app.post("/reaction-game/submit_score")
 async def submit_reaction_score(
     request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
@@ -953,6 +873,7 @@ async def submit_reaction_score(
                     user_id, score, average_time_ms, fastest_time_ms,
                     slowest_time_ms, accuracy, created_at
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, created_at
                 """,
                 (
                     user_id,
@@ -964,6 +885,17 @@ async def submit_reaction_score(
                     created_at,
                 ),
             )
+            inserted = cursor.fetchone()
+        check_and_award_achievements(
+            conn,
+            user_id,
+            "reaction",
+            {
+                "average_time_ms": average_time_ms,
+                "accuracy": accuracy,
+                "created_at": inserted[1] if inserted else created_at,
+            },
+        )
         conn.commit()
     finally:
         conn.close()
@@ -1016,9 +948,26 @@ async def submit_memory_score(
                 INSERT INTO memory_scores (
                     user_id, total_score, round1_score, round2_score, round3_score, created_at
                 ) VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id, created_at
                 """,
                 (user_id, total_score, r1, r2, r3, created_at),
             )
+            inserted = cursor.fetchone()
+            cursor.execute(
+                "SELECT COALESCE(SUM(total_score), 0) FROM memory_scores WHERE user_id = %s",
+                (user_id,),
+            )
+            running_total = cursor.fetchone()[0] or 0
+        check_and_award_achievements(
+            conn,
+            user_id,
+            "memory",
+            {
+                "total_score": total_score,
+                "running_total": running_total,
+                "created_at": inserted[1] if inserted else created_at,
+            },
+        )
         conn.commit()
     finally:
         conn.close()
@@ -1227,7 +1176,7 @@ async def submit_yetamax_score(
                     user_id, score, correct_count, wrong_count,
                     avg_time_ms, min_time_ms, is_valid, raw_payload
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id
+                RETURNING id, created_at
                 """,
                 (
                     current_user["id"],
@@ -1240,7 +1189,19 @@ async def submit_yetamax_score(
                     psycopg2.extras.Json(raw_payload),
                 ),
             )
-            new_id = cursor.fetchone()[0]
+            inserted = cursor.fetchone()
+            new_id = inserted[0]
+        check_and_award_achievements(
+            conn,
+            current_user["id"],
+            "math_round1",
+            {
+                "avg_time_ms": avg_time_ms,
+                "wrong_count": wrong_count,
+                "correct_count": correct_count,
+                "created_at": inserted[1] if inserted else None,
+            },
+        )
         conn.commit()
     finally:
         conn.close()
@@ -1296,7 +1257,7 @@ async def submit_maveric_score(
                     user_id, score, correct_count, wrong_count,
                     avg_time_ms, min_time_ms, total_questions, is_valid, raw_payload, updated_at
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                RETURNING id
+                RETURNING id, created_at
                 """,
                 (
                     current_user["id"],
@@ -1310,7 +1271,19 @@ async def submit_maveric_score(
                     psycopg2.extras.Json(raw_payload),
                 ),
             )
-            new_id = cursor.fetchone()[0]
+            inserted = cursor.fetchone()
+            new_id = inserted[0]
+        check_and_award_achievements(
+            conn,
+            current_user["id"],
+            "math_round2",
+            {
+                "avg_time_ms": avg_time_ms,
+                "wrong_count": wrong_count,
+                "correct_count": correct_count,
+                "created_at": inserted[1] if inserted else None,
+            },
+        )
         conn.commit()
     finally:
         conn.close()
@@ -1349,7 +1322,7 @@ async def submit_math_session(
                 INSERT INTO math_session_scores (
                     user_id, round1_score_id, round2_score_id, combined_score
                 ) VALUES (%s, %s, %s, %s)
-                RETURNING id
+                RETURNING id, created_at
                 """,
                 (
                     current_user["id"],
@@ -1358,7 +1331,14 @@ async def submit_math_session(
                     combined_score,
                 ),
             )
-            new_id = cursor.fetchone()[0]
+            inserted = cursor.fetchone()
+            new_id = inserted[0]
+        check_and_award_achievements(
+            conn,
+            current_user["id"],
+            "math_session",
+            {"combined_score": combined_score, "created_at": inserted[1] if inserted else None},
+        )
         conn.commit()
     finally:
         conn.close()

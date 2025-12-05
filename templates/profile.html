@@ -4,9 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <title>CortiX Games</title>
+    <title>CortiX Profile</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/auth.css">
+    <style>
+        body { background: linear-gradient(135deg, #f5f7ff, #e0f2fe); color: #0f172a; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+        .page { max-width: 1100px; margin: 0 auto; padding: 32px 16px 80px; }
+        .hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
+        .card { background: #ffffff; border: 1px solid #dce6f5; border-radius: 16px; padding: 20px; box-shadow: 0 12px 30px rgba(37, 99, 235, 0.12); }
+        .profile-card { flex: 1 1 320px; }
+        .muted { color: #475569; }
+        .flag { font-size: 24px; margin-right: 10px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 16px; }
+        .label { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin-bottom: 6px; }
+        .value { font-weight: 700; font-size: 20px; color: #0f172a; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 12px; }
+        select, input[type="text"], input[type="checkbox"] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; }
+        button.primary { background: linear-gradient(135deg, #4f46e5, #0ea5e9); color: white; border: none; padding: 12px 18px; border-radius: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 10px 25px rgba(14,165,233,0.25); }
+        .section-title { display: flex; justify-content: space-between; align-items: center; margin-top: 28px; margin-bottom: 10px; }
+        .card-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; color: #0f172a; }
+        .subtext { font-size: 14px; color: #475569; }
+        .badge { padding: 8px 12px; border-radius: 999px; background: #e0f2fe; color: #0f172a; font-size: 13px; }
+        .achievements { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+        .achievement { border: 1px solid #dce6f5; border-radius: 12px; padding: 12px; background: #f8fafc; }
+        .achievement.earned { border-color: #22c55e; background: #ecfdf3; box-shadow: 0 8px 20px rgba(34,197,94,0.15); }
+        .achievement .code { font-family: monospace; color: #6b7280; font-size: 13px; }
+        .radar-placeholder { height: 240px; display: grid; place-items: center; color: #475569; border: 1px dashed #cbd5e1; border-radius: 12px; background: #f8fafc; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+        .metric-row { display: flex; justify-content: space-between; margin: 6px 0; color: #0f172a; }
+        .pill { padding: 6px 10px; border-radius: 10px; background: #e2e8f0; font-size: 13px; color: #0f172a; }
+        .share-btn { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; background: #e0f2fe; padding: 10px 14px; border-radius: 10px; color: #0f172a; border: 1px solid #cbd5e1; box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18); }
+        .notice { margin-top: 10px; color: #16a34a; }
+    </style>
 </head>
 <body>
     <div class="auth-bar">
@@ -22,176 +51,105 @@
         {% endif %}
     </div>
 
-    <div class="auth-form profile-card">
-        <h2>Your recent attempts</h2>
-        <p class="muted">Scores attached to your account persist across devices. Guests stay on the local browser only.</p>
-        <div class="flag-row">
-            <div>
-                <div class="muted">Current flag</div>
-                <div class="flag-pill">{{ current_user.country_code or '??' }}</div>
-            </div>
-            <form method="POST" action="/profile/flag" class="flag-form">
-                <label for="country_code">Add or update your two-letter flag</label>
-                <div class="flag-input-row">
-                    <input type="text" id="country_code" name="country_code" maxlength="2" placeholder="US" required>
-                    <button type="submit">Save</button>
-                </div>
-            </form>
-        </div>
-        {% if message %}
-            <div class="notice success">{{ message }}</div>
-        {% endif %}
-        {% if error %}
-            <div class="notice error">{{ error }}</div>
-        {% endif %}
-
-        <div class="insight-grid">
-            <div class="insight-card">
-                <div class="insight-header">
+    <div class="page" id="profile-root" data-username="{{ profile_user.username }}" data-owner="{{ '1' if is_owner else '0' }}">
+        <div class="hero">
+            <div class="card profile-card">
+                <div class="label">Username</div>
+                <div class="value">{{ profile_user.username }}</div>
+                <div class="subtext">Joined {{ profile_user.created_at.date() if profile_user.created_at else '—' }}</div>
+                <div class="grid">
                     <div>
-                        <div class="muted">Reaction game</div>
-                        <h3>Cognitive score</h3>
+                        <div class="label">Country</div>
+                        <div class="value">{{ profile_user.country_code or '??' }}</div>
                     </div>
-                    <div class="score-pill">{{ reaction_insights.cognitive_score or '—' }}</div>
-                </div>
-                <div class="insight-body">
-                    <p class="muted">Best score: {{ reaction_insights.best_score or '—' }}</p>
-                    <p class="muted">Avg. accuracy: {{ reaction_insights.accuracy or '—' }}{% if reaction_insights.accuracy %}%{% endif %} | Avg. time: {{ reaction_insights.average_time_ms or '—' }}{% if reaction_insights.average_time_ms %} ms{% endif %}</p>
-                    <div class="list-block">
-                        <div>
-                            <div class="muted">Strengths</div>
-                            <ul>
-                                {% for item in reaction_insights.strengths %}
-                                <li>{{ item }}</li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                        {% if reaction_insights.weaknesses %}
-                        <div>
-                            <div class="muted">Needs work</div>
-                            <ul>
-                                {% for item in reaction_insights.weaknesses %}
-                                <li>{{ item }}</li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <div class="insight-card">
-                <div class="insight-header">
                     <div>
-                        <div class="muted">Memory game</div>
-                        <h3>Cognitive score</h3>
+                        <div class="label">Gender</div>
+                        <div class="value">{{ profile_user.gender or '—' }}</div>
                     </div>
-                    <div class="score-pill">{{ memory_insights.cognitive_score or '—' }}</div>
-                </div>
-                <div class="insight-body">
-                    <p class="muted">Best total: {{ memory_insights.best_total or '—' }} | Avg. total: {{ memory_insights.average_total or '—' }}</p>
-                    {% if memory_insights.round_averages %}
-                    <p class="muted">Round avgs — R1: {{ memory_insights.round_averages[1] }}, R2: {{ memory_insights.round_averages[2] }}, R3: {{ memory_insights.round_averages[3] }}</p>
-                    {% endif %}
-                    <div class="list-block">
-                        <div>
-                            <div class="muted">Strengths</div>
-                            <ul>
-                                {% for item in memory_insights.strengths %}
-                                <li>{{ item }}</li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                        {% if memory_insights.weaknesses %}
-                        <div>
-                            <div class="muted">Needs work</div>
-                            <ul>
-                                {% for item in memory_insights.weaknesses %}
-                                <li>{{ item }}</li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <div class="insight-card">
-                <div class="insight-header">
                     <div>
-                        <div class="muted">Arithmetic</div>
-                        <h3>Average time by type</h3>
+                        <div class="label">Age range</div>
+                        <div class="value">{{ profile_user.age_range or '—' }}</div>
                     </div>
-                    <div class="score-pill">R1 best: {{ math_insights.round1.best_score or '—' }}</div>
-                </div>
-                <div class="insight-body">
-                    <p class="muted">Round 1 avg time: {{ math_insights.round1.overall_avg or '—' }}{% if math_insights.round1.overall_avg %} s{% endif %}</p>
-                    <p class="muted">Round 2 best: {{ math_insights.round2.best_score or '—' }} | Avg time: {{ math_insights.round2.overall_avg or '—' }}{% if math_insights.round2.overall_avg %} s{% endif %}</p>
-                    <div class="list-block">
-                        <div>
-                            <div class="muted">Round 1 types</div>
-                            <table class="attempt-table">
-                                <thead>
-                                    <tr><th>Type</th><th>Avg time (s)</th></tr>
-                                </thead>
-                                <tbody>
-                                    {% if math_insights.round1.averages %}
-                                        {% for row in math_insights.round1.averages %}
-                                        <tr><td>{{ row.type }}</td><td>{{ row.avg_time_s }}</td></tr>
-                                        {% endfor %}
-                                    {% else %}
-                                        <tr><td colspan="2">Play a round to unlock data.</td></tr>
-                                    {% endif %}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div>
-                            <div class="muted">Round 2 types</div>
-                            <table class="attempt-table">
-                                <thead>
-                                    <tr><th>Type</th><th>Avg time (s)</th></tr>
-                                </thead>
-                                <tbody>
-                                    {% if math_insights.round2.averages %}
-                                        {% for row in math_insights.round2.averages %}
-                                        <tr><td>{{ row.type }}</td><td>{{ row.avg_time_s }}</td></tr>
-                                        {% endfor %}
-                                    {% else %}
-                                        <tr><td colspan="2">Complete Maveric to see timings.</td></tr>
-                                    {% endif %}
-                                </tbody>
-                            </table>
-                        </div>
+                    <div>
+                        <div class="label">Handedness</div>
+                        <div class="value">{{ profile_user.handedness or '—' }}</div>
                     </div>
                 </div>
+                {% if is_owner %}
+                <form method="POST" action="/profile" class="form-grid" style="margin-top:16px;">
+                    <div>
+                        <div class="label">Country code</div>
+                        <input type="text" name="country_code" maxlength="2" value="{{ profile_user.country_code or '' }}" placeholder="US">
+                    </div>
+                    <div>
+                        <div class="label">Gender</div>
+                        <select name="gender">
+                            <option value="" {% if not profile_user.gender %}selected{% endif %}>Prefer not to say</option>
+                            <option value="female" {% if profile_user.gender=='female' %}selected{% endif %}>Female</option>
+                            <option value="male" {% if profile_user.gender=='male' %}selected{% endif %}>Male</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div class="label">Age range</div>
+                        <select name="age_range">
+                            <option value="" {% if not profile_user.age_range %}selected{% endif %}>Prefer not to say</option>
+                            <option value="under_18" {% if profile_user.age_range=='under_18' %}selected{% endif %}>Under 18</option>
+                            <option value="18_24" {% if profile_user.age_range=='18_24' %}selected{% endif %}>18-24</option>
+                            <option value="25_34" {% if profile_user.age_range=='25_34' %}selected{% endif %}>25-34</option>
+                            <option value="35_44" {% if profile_user.age_range=='35_44' %}selected{% endif %}>35-44</option>
+                            <option value="45_54" {% if profile_user.age_range=='45_54' %}selected{% endif %}>45-54</option>
+                            <option value="55_plus" {% if profile_user.age_range=='55_plus' %}selected{% endif %}>55+</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div class="label">Handedness</div>
+                        <select name="handedness">
+                            <option value="" {% if not profile_user.handedness %}selected{% endif %}>Prefer not to say</option>
+                            <option value="right" {% if profile_user.handedness=='right' %}selected{% endif %}>Right-handed</option>
+                            <option value="left" {% if profile_user.handedness=='left' %}selected{% endif %}>Left-handed</option>
+                            <option value="ambi" {% if profile_user.handedness=='ambi' %}selected{% endif %}>Ambidextrous</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="checkbox" id="is_public" name="is_public" value="1" {% if profile_user.is_public %}checked{% endif %}>
+                        <label for="is_public" class="muted">Public profile</label>
+                    </div>
+                    <div>
+                        <button type="submit" class="primary">Save profile</button>
+                    </div>
+                </form>
+                {% endif %}
+                <div style="margin-top:14px; display:flex; gap:12px; flex-wrap:wrap;">
+                    <button class="share-btn" id="share-btn">Share profile</button>
+                    {% if not profile_user.is_public %}<span class="muted">Profile is private</span>{% endif %}
+                </div>
+                <div id="share-notice" class="notice" style="display:none;">Link copied!</div>
+            </div>
+            <div class="card" style="flex:1 1 320px;">
+                <div class="card-title">Brain radar</div>
+                <div class="subtext">Snapshot of speed, accuracy, memory, consistency, and engagement.</div>
+                <canvas id="radarChart" aria-label="Radar chart"></canvas>
+                <div class="radar-placeholder" id="radarPlaceholder">Loading radar…</div>
             </div>
         </div>
 
-        {% if attempts %}
-            <div class="table-wrapper">
-                <table class="attempt-table">
-                    <thead>
-                        <tr>
-                            <th>Game</th>
-                            <th>Score</th>
-                            <th>When</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for attempt in attempts %}
-                            <tr>
-                                {% set label = attempt.game.replace('_', ' ').title() %}
-                                <td>{{ label }}</td>
-                                <td>{{ attempt.score }}</td>
-                                <td>{{ attempt.created_at }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
-            <p class="muted">No attempts recorded yet. Play a game to see your history.</p>
-        {% endif %}
+        <div class="section-title">
+            <h3>Game breakdown</h3>
+            <span class="muted">Performance across each mode</span>
+        </div>
+        <div class="metrics-grid">
+            <div class="card" id="reaction-card"></div>
+            <div class="card" id="memory-card"></div>
+            <div class="card" id="math-card"></div>
+        </div>
+
+        <div class="section-title">
+            <h3>Achievements</h3>
+            <span class="muted">Earn badges by playing and improving</span>
+        </div>
+        <div class="achievements" id="achievements-grid"></div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/js/profile.js"></script>
 </body>
 </html>

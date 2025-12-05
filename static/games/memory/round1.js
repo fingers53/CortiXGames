@@ -28,6 +28,8 @@ let sequenceLength = 5;
 let canClick = false;
 let isRoundActive = false;
 let attemptsForQuestion = 0;
+let questionStartMs = 0;
+let currentClicks = [];
 
 function handleCanvasClick(event) {
     if (!canClick) return;
@@ -59,6 +61,8 @@ function resetState() {
     canClick = false;
     isRoundActive = false;
     attemptsForQuestion = 0;
+    questionStartMs = 0;
+    currentClicks = [];
 }
 
 function startRound(onRoundComplete) {
@@ -120,10 +124,17 @@ function displayPattern() {
     setTimeout(() => {
         clearGrid();
         canClick = true;
+        questionStartMs = performance.now();
+        currentClicks = [];
     }, 500);
 }
 
 function handlePatternClick(x, y) {
+    if (questionStartMs === 0) {
+        questionStartMs = performance.now();
+    }
+    currentClicks.push({ x, y, tMs: performance.now() - questionStartMs });
+
     const isCorrectClick = currentPattern.some(([px, py]) => px === x && py === y);
 
     if (isCorrectClick) {
@@ -145,6 +156,8 @@ function handlePatternClick(x, y) {
                 wasCorrect: true,
                 attempts: attemptsForQuestion,
                 sequenceLength,
+                targets: currentPattern.map(([px, py]) => [px, py]),
+                clicks: currentClicks,
             });
             showFeedback("Correct!", true, 800, () => {
                 clearGrid();
@@ -161,6 +174,8 @@ function handlePatternClick(x, y) {
             wasCorrect: false,
             attempts: attemptsForQuestion,
             sequenceLength,
+            targets: currentPattern.map(([px, py]) => [px, py]),
+            clicks: currentClicks,
         });
         showFeedback("Incorrect! Here is the correct pattern:", false, 800, () => {
             clearGrid();

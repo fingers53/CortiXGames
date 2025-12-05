@@ -28,6 +28,8 @@ let sequenceLength = 5;
 let canClick = false;
 let isRoundActive = false;
 let attemptsForQuestion = 0;
+let questionStartMs = 0;
+let currentClicks = [];
 
 function handleCanvasClickRound2(event) {
     if (!canClick) return;
@@ -60,6 +62,8 @@ function resetState() {
     canClick = false;
     isRoundActive = false;
     attemptsForQuestion = 0;
+    questionStartMs = 0;
+    currentClicks = [];
 }
 
 function startRound(onRoundComplete) {
@@ -148,6 +152,8 @@ function displaySequentialPattern() {
     setTimeout(() => {
         clearGrid();
         canClick = true;
+        questionStartMs = performance.now();
+        currentClicks = [];
     }, delay);
 }
 
@@ -155,6 +161,11 @@ function handlePatternClick(x, y) {
     if (userPattern.some(([ux, uy]) => ux === x && uy === y)) {
         return;
     }
+
+    if (questionStartMs === 0) {
+        questionStartMs = performance.now();
+    }
+    currentClicks.push({ x, y, tMs: performance.now() - questionStartMs });
 
     const isCorrectClick = currentPattern.some(([px, py, pcolor]) => px === x && py === y && pcolor === "blue");
 
@@ -177,6 +188,10 @@ function handlePatternClick(x, y) {
                 wasCorrect: true,
                 attempts: attemptsForQuestion,
                 sequenceLength,
+                targets: currentPattern
+                    .filter(([_, __, color]) => color === "blue")
+                    .map(([px, py]) => [px, py]),
+                clicks: currentClicks,
             });
             showFeedback("Correct!", true, 800, () => {
                 clearGrid();
@@ -193,6 +208,10 @@ function handlePatternClick(x, y) {
             wasCorrect: false,
             attempts: attemptsForQuestion,
             sequenceLength,
+            targets: currentPattern
+                .filter(([_, __, color]) => color === "blue")
+                .map(([px, py]) => [px, py]),
+            clicks: currentClicks,
         });
         showFeedback("Incorrect! Here is the correct pattern:", false, 800, () => {
             clearGrid();

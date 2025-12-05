@@ -31,6 +31,8 @@ let triangleCount = 6;
 let canClick = false;
 let attemptsForQuestion = 0;
 let isRoundActive = false;
+let questionStartMs = 0;
+let currentClicks = [];
 
 function handleCanvasClick(event) {
     if (!canClick) return;
@@ -62,6 +64,8 @@ function resetState() {
     canClick = false;
     attemptsForQuestion = 0;
     isRoundActive = false;
+    questionStartMs = 0;
+    currentClicks = [];
 }
 
 function startRound(onRoundComplete) {
@@ -132,6 +136,8 @@ function displayWithRotatedTriangle() {
 
     addDummyTriangles();
     canClick = true;
+    questionStartMs = performance.now();
+    currentClicks = [];
 }
 
 function addDummyTriangles() {
@@ -150,6 +156,10 @@ function handleTriangleClick(x, y) {
     if (!rotatedTriangle) return;
 
     const isCorrect = x === rotatedTriangle[0] && y === rotatedTriangle[1];
+    if (questionStartMs === 0) {
+        questionStartMs = performance.now();
+    }
+    currentClicks.push({ x, y, tMs: performance.now() - questionStartMs });
     attemptsForQuestion += 1;
     canClick = false;
 
@@ -159,6 +169,8 @@ function handleTriangleClick(x, y) {
         wasCorrect: isCorrect,
         attempts: attemptsForQuestion,
         sequenceLength: triangleCount,
+        targets: rotatedTriangle ? [[rotatedTriangle[0], rotatedTriangle[1]]] : [],
+        clicks: currentClicks,
     });
 
     if (isCorrect) {

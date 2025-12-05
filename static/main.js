@@ -4,6 +4,7 @@ const isLoggedIn = (bodyEl?.dataset?.loggedIn || "false") === "true";
 const prefillUsername = bodyEl?.dataset?.prefillUsername || "";
 const bestReaction = document.getElementById("best-reaction");
 const bestMemory = document.getElementById("best-memory");
+const bestArithmetic = document.getElementById("best-arithmetic");
 const bestScoresContainer = document.getElementById("best-scores");
 const passwordUpgrade = document.getElementById("password-upgrade");
 const passwordUsernameInput = document.getElementById("password-username");
@@ -120,12 +121,13 @@ function hydrateUsernameField() {
     }
 }
 
-function renderBestScores(reactionBest, memoryBest) {
+function renderBestScores(reactionBest, memoryBest, arithmeticBest) {
     const hasReaction = reactionBest != null;
     const hasMemory = memoryBest != null;
+    const hasArithmetic = arithmeticBest != null;
 
     // If we have no scores at all, keep it hidden
-    if (!hasReaction && !hasMemory) {
+    if (!hasReaction && !hasMemory && !hasArithmetic) {
         if (bestScoresContainer) {
             bestScoresContainer.style.display = "none";
         }
@@ -143,6 +145,10 @@ function renderBestScores(reactionBest, memoryBest) {
     if (bestMemory && hasMemory) {
         bestMemory.textContent = `Best Memory: ${memoryBest}`;
     }
+
+    if (bestArithmetic && hasArithmetic) {
+        bestArithmetic.textContent = `Best Arithmetic: ${arithmeticBest}`;
+    }
 }
 
 function fetchBestScores() {
@@ -152,7 +158,7 @@ function fetchBestScores() {
     fetch(`/api/my-best-scores?username=${encodeURIComponent(username)}`)
         .then((res) => res.json())
         .then((data) => {
-            renderBestScores(data.reaction_best, data.memory_best);
+            renderBestScores(data.reaction_best, data.memory_best, data.arithmetic_best);
         })
         .catch((err) => {
             console.error("Failed to fetch best scores:", err);

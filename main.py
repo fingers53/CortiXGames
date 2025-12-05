@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import secrets
@@ -8,6 +9,13 @@ import psycopg2
 import psycopg2.extras
 import requests
 from dotenv import load_dotenv
+from app.achievements import check_and_award_achievements, seed_achievements
+from app.db import (
+    ensure_achievements_tables,
+    ensure_memory_score_payload_column,
+    ensure_user_profile_columns,
+)
+from app.routers import profile as profile_router
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -188,6 +196,11 @@ def ensure_math_session_scores_table():
 # Ensure Round 2 and combined storage exist on startup
 ensure_maveric_scores_table()
 ensure_math_session_scores_table()
+ensure_user_profile_columns()
+ensure_memory_score_payload_column()
+ensure_achievements_tables()
+seed_achievements()
+app.include_router(profile_router.router)
 
 
 def read_html(file_name: str) -> str:
@@ -276,7 +289,10 @@ def get_or_create_user(conn, username: str, country_code: str | None) -> int:
 def get_user_by_id(conn, user_id: int) -> Optional[dict]:
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
         cursor.execute(
-            "SELECT id, username, country_code, password_hash FROM users WHERE id = %s",
+            """
+            SELECT id, username, country_code, password_hash, gender, age_range, handedness, is_public, created_at
+            FROM users WHERE id = %s
+            """,
             (user_id,),
         )
         row = cursor.fetchone()
@@ -383,27 +399,6 @@ def validate_answer_record(answer_record: List[Dict]):
             raise HTTPException(status_code=422, detail="Each answer must include correctness")
 
 
-def compute_memory_scores(question_log: List[Dict]) -> tuple[float, float, float, float]:
-    """Compute per-round scores and a total for the memory game.
-
-    Scoring rule:
-    +2 for correct on first attempt, +1 for correct with retries, -1 for incorrect.
-    Scores can go negative.
-    """
-
-    round_scores = {1: 0.0, 2: 0.0, 3: 0.0}
-    for entry in question_log:
-        round_num = int(entry.get("round", 0))
-        if round_num not in round_scores:
-            continue
-        was_correct = bool(entry.get("wasCorrect", False))
-        attempts = int(entry.get("attempts", 1))
-        if was_correct:
-            round_scores[round_num] += 2.0 if attempts == 1 else 1.0
-        else:
-            round_scores[round_num] -= 1.0
-
-
 def calculate_yetamax_score(
     correct_count: int, wrong_count: int, avg_time_ms: float, per_questions=None
 ) -> int:
@@ -419,11 +414,97 @@ def calculate_yetamax_score(
 
     return base_score - penalty - streak_penalty
 
+
+def compute_memory_scores(question_log: List[Dict]) -> dict:
+    """Compute per-round scores, partial credit, and timing insights.
+
+    Scoring rule:
+    +2 for correct on first attempt, +1 for correct with retries, -1 for incorrect.
+    Partial credit is awarded for near misses (within 1–2 grid cells) based on the
+    closest incorrect click. Timing metrics capture within-question pacing.
+    """
+
+    round_scores = {1: 0.0, 2: 0.0, 3: 0.0}
+    near_miss_count = 0
+    total_clicks = 0
+    durations = []
+    intervals = []
+
+    for entry in question_log:
+        round_num = int(entry.get("round", 0))
+        if round_num not in round_scores:
+            continue
+
+        was_correct = bool(entry.get("wasCorrect", False))
+        attempts = max(int(entry.get("attempts", 1) or 1), 1)
+        targets = entry.get("targets") or entry.get("targetCells") or []
+        clicks = entry.get("clicks") or []
+
+        if not isinstance(targets, (list, tuple)):
+            targets = []
+        targets_list = list(targets)
+
+        correct_cells = {(int(x), int(y)) for x, y in targets_list if isinstance(targets_list, list)}
+        best_distance = None
+        click_times = []
+
+        for click in clicks:
+            try:
+                cx = int(click.get("x"))
+                cy = int(click.get("y"))
+            except (TypeError, ValueError):
+                continue
+            total_clicks += 1
+
+            if correct_cells:
+                distances = [abs(cx - tx) + abs(cy - ty) for tx, ty in correct_cells]
+                min_dist = min(distances)
+                best_distance = min(best_distance, min_dist) if best_distance is not None else min_dist
+                if min_dist == 1:
+                    near_miss_count += 1
+
+            t_ms = click.get("tMs")
+            if t_ms is None:
+                t_ms = click.get("timeMs")
+            if t_ms is not None:
+                try:
+                    click_times.append(float(t_ms))
+                except (TypeError, ValueError):
+                    pass
+
+        base_score = 2.0 if was_correct and attempts == 1 else 1.0 if was_correct else -1.0
+        partial_credit = 0.0
+        if best_distance is not None and best_distance > 0:
+            if best_distance <= 1:
+                partial_credit = 0.5
+            elif best_distance <= 2:
+                partial_credit = 0.25
+
+        round_scores[round_num] += base_score + partial_credit
+
+        if click_times:
+            click_times.sort()
+            durations.append(click_times[-1] - click_times[0])
+            intervals.extend([b - a for a, b in zip(click_times, click_times[1:])])
+
     r1 = round_scores[1]
     r2 = round_scores[2]
     r3 = round_scores[3]
     total = r1 + r2 + r3
-    return total, r1, r2, r3
+
+    avg_duration_ms = sum(durations) / len(durations) if durations else 0.0
+    avg_interval_ms = sum(intervals) / len(intervals) if intervals else 0.0
+
+    return {
+        "total": total,
+        "round1": r1,
+        "round2": r2,
+        "round3": r3,
+        "near_misses": near_miss_count,
+        "guess_count": total_clicks,
+        "avg_duration_ms": avg_duration_ms,
+        "avg_interval_ms": avg_interval_ms,
+    }
 
 
 def resolve_user_id(
@@ -830,96 +911,6 @@ async def logout(request: Request):
     return response
 
 
-@app.get("/profile", response_class=HTMLResponse)
-async def profile(request: Request, current_user=Depends(get_current_user)):
-    if not current_user:
-        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
-
-    conn = get_db_connection()
-    try:
-        attempts = fetch_recent_attempts(conn, current_user["id"])
-        reaction_insights = fetch_reaction_insights(conn, current_user["id"])
-        memory_insights = fetch_memory_insights(conn, current_user["id"])
-        math_insights = fetch_math_insights(conn, current_user["id"])
-    finally:
-        conn.close()
-
-    return render_template(
-        "profile.html",
-        request,
-        {
-            "current_user": current_user,
-            "attempts": attempts,
-            "reaction_insights": reaction_insights,
-            "memory_insights": memory_insights,
-            "math_insights": math_insights,
-        },
-    )
-
-
-@app.post("/profile/flag", response_class=HTMLResponse)
-async def update_flag(
-    request: Request,
-    country_code: str = Form(...),
-    current_user=Depends(get_current_user),
-):
-    if not current_user:
-        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
-
-    code = (country_code or "").strip().upper()
-    if not re.match(r"^[A-Z]{2}$", code):
-        conn = get_db_connection()
-        try:
-            attempts = fetch_recent_attempts(conn, current_user["id"])
-            reaction_insights = fetch_reaction_insights(conn, current_user["id"])
-            memory_insights = fetch_memory_insights(conn, current_user["id"])
-            math_insights = fetch_math_insights(conn, current_user["id"])
-        finally:
-            conn.close()
-        return render_template(
-            "profile.html",
-            request,
-            {
-                "current_user": current_user,
-                "attempts": attempts,
-                "reaction_insights": reaction_insights,
-                "memory_insights": memory_insights,
-                "math_insights": math_insights,
-                "error": "Please provide a two-letter country code (e.g., US, GB).",
-            },
-        )
-
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                "UPDATE users SET country_code = %s WHERE id = %s",
-                (code, current_user["id"]),
-            )
-        conn.commit()
-        attempts = fetch_recent_attempts(conn, current_user["id"])
-        reaction_insights = fetch_reaction_insights(conn, current_user["id"])
-        memory_insights = fetch_memory_insights(conn, current_user["id"])
-        math_insights = fetch_math_insights(conn, current_user["id"])
-    finally:
-        conn.close()
-
-    updated_user = dict(current_user)
-    updated_user["country_code"] = code
-    return render_template(
-        "profile.html",
-        request,
-        {
-            "current_user": updated_user,
-            "attempts": attempts,
-            "reaction_insights": reaction_insights,
-            "memory_insights": memory_insights,
-            "math_insights": math_insights,
-            "message": "Flag updated for your account.",
-        },
-    )
-
-
 @app.post("/reaction-game/submit_score")
 async def submit_reaction_score(
     request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
@@ -953,6 +944,7 @@ async def submit_reaction_score(
                     user_id, score, average_time_ms, fastest_time_ms,
                     slowest_time_ms, accuracy, created_at
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, created_at
                 """,
                 (
                     user_id,
@@ -964,6 +956,17 @@ async def submit_reaction_score(
                     created_at,
                 ),
             )
+            inserted = cursor.fetchone()
+        check_and_award_achievements(
+            conn,
+            user_id,
+            "reaction",
+            {
+                "average_time_ms": average_time_ms,
+                "accuracy": accuracy,
+                "created_at": inserted[1] if inserted else created_at,
+            },
+        )
         conn.commit()
     finally:
         conn.close()
@@ -994,6 +997,8 @@ async def submit_memory_score(
         seq_len = entry.get("sequenceLength")
         attempts = entry.get("attempts")
         was_correct = entry.get("wasCorrect")
+        targets = entry.get("targets") or entry.get("targetCells") or []
+        clicks = entry.get("clicks") or []
         if round_num not in (1, 2, 3):
             raise HTTPException(status_code=422, detail="Round must be between 1 and 3")
         if seq_len is None or not (1 <= seq_len <= 25):
@@ -1002,8 +1007,16 @@ async def submit_memory_score(
             raise HTTPException(status_code=422, detail="Attempts must be at least 1")
         if was_correct not in (True, False):
             raise HTTPException(status_code=422, detail="Each question must include correctness")
+        if targets and not all(isinstance(t, (list, tuple)) and len(t) >= 2 for t in targets):
+            raise HTTPException(status_code=422, detail="Targets must be coordinates")
+        if clicks and not all(isinstance(c, dict) for c in clicks):
+            raise HTTPException(status_code=422, detail="Clicks must be objects")
 
-    total_score, r1, r2, r3 = compute_memory_scores(question_log)
+    score_result = compute_memory_scores(question_log)
+    total_score = score_result["total"]
+    r1 = score_result["round1"]
+    r2 = score_result["round2"]
+    r3 = score_result["round3"]
     country_code = country_input or get_country_code_from_ip(request.client.host)
 
     conn = get_db_connection()
@@ -1014,11 +1027,43 @@ async def submit_memory_score(
             cursor.execute(
                 """
                 INSERT INTO memory_scores (
-                    user_id, total_score, round1_score, round2_score, round3_score, created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s)
+                    user_id, total_score, round1_score, round2_score, round3_score, raw_payload, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, created_at
                 """,
-                (user_id, total_score, r1, r2, r3, created_at),
+                (
+                    user_id,
+                    total_score,
+                    r1,
+                    r2,
+                    r3,
+                    json.dumps(
+                        {
+                            "near_misses": score_result["near_misses"],
+                            "guess_count": score_result["guess_count"],
+                            "avg_duration_ms": score_result["avg_duration_ms"],
+                            "avg_interval_ms": score_result["avg_interval_ms"],
+                        }
+                    ),
+                    created_at,
+                ),
             )
+            inserted = cursor.fetchone()
+            cursor.execute(
+                "SELECT COALESCE(SUM(total_score), 0) FROM memory_scores WHERE user_id = %s",
+                (user_id,),
+            )
+            running_total = cursor.fetchone()[0] or 0
+        check_and_award_achievements(
+            conn,
+            user_id,
+            "memory",
+            {
+                "total_score": total_score,
+                "running_total": running_total,
+                "created_at": inserted[1] if inserted else created_at,
+            },
+        )
         conn.commit()
     finally:
         conn.close()
@@ -1030,6 +1075,10 @@ async def submit_memory_score(
             "round1Score": r1,
             "round2Score": r2,
             "round3Score": r3,
+            "nearMisses": score_result["near_misses"],
+            "guessCount": score_result["guess_count"],
+            "avgDurationMs": score_result["avg_duration_ms"],
+            "avgIntervalMs": score_result["avg_interval_ms"],
         }
     )
 
@@ -1227,7 +1276,7 @@ async def submit_yetamax_score(
                     user_id, score, correct_count, wrong_count,
                     avg_time_ms, min_time_ms, is_valid, raw_payload
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id
+                RETURNING id, created_at
                 """,
                 (
                     current_user["id"],
@@ -1240,7 +1289,19 @@ async def submit_yetamax_score(
                     psycopg2.extras.Json(raw_payload),
                 ),
             )
-            new_id = cursor.fetchone()[0]
+            inserted = cursor.fetchone()
+            new_id = inserted[0]
+        check_and_award_achievements(
+            conn,
+            current_user["id"],
+            "math_round1",
+            {
+                "avg_time_ms": avg_time_ms,
+                "wrong_count": wrong_count,
+                "correct_count": correct_count,
+                "created_at": inserted[1] if inserted else None,
+            },
+        )
         conn.commit()
     finally:
         conn.close()
@@ -1296,7 +1357,7 @@ async def submit_maveric_score(
                     user_id, score, correct_count, wrong_count,
                     avg_time_ms, min_time_ms, total_questions, is_valid, raw_payload, updated_at
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                RETURNING id
+                RETURNING id, created_at
                 """,
                 (
                     current_user["id"],
@@ -1310,7 +1371,19 @@ async def submit_maveric_score(
                     psycopg2.extras.Json(raw_payload),
                 ),
             )
-            new_id = cursor.fetchone()[0]
+            inserted = cursor.fetchone()
+            new_id = inserted[0]
+        check_and_award_achievements(
+            conn,
+            current_user["id"],
+            "math_round2",
+            {
+                "avg_time_ms": avg_time_ms,
+                "wrong_count": wrong_count,
+                "correct_count": correct_count,
+                "created_at": inserted[1] if inserted else None,
+            },
+        )
         conn.commit()
     finally:
         conn.close()
@@ -1349,7 +1422,7 @@ async def submit_math_session(
                 INSERT INTO math_session_scores (
                     user_id, round1_score_id, round2_score_id, combined_score
                 ) VALUES (%s, %s, %s, %s)
-                RETURNING id
+                RETURNING id, created_at
                 """,
                 (
                     current_user["id"],
@@ -1358,7 +1431,14 @@ async def submit_math_session(
                     combined_score,
                 ),
             )
-            new_id = cursor.fetchone()[0]
+            inserted = cursor.fetchone()
+            new_id = inserted[0]
+        check_and_award_achievements(
+            conn,
+            current_user["id"],
+            "math_session",
+            {"combined_score": combined_score, "created_at": inserted[1] if inserted else None},
+        )
         conn.commit()
     finally:
         conn.close()
@@ -1485,7 +1565,12 @@ async def my_best_scores(username: str):
             cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
             row = cursor.fetchone()
             if not row:
-                return {"username": username, "reaction_best": None, "memory_best": None}
+                return {
+                    "username": username,
+                    "reaction_best": None,
+                    "memory_best": None,
+                    "arithmetic_best": None,
+                }
 
             user_id = row[0]
 
@@ -1501,10 +1586,24 @@ async def my_best_scores(username: str):
             )
             memory_best = cursor.fetchone()[0]
 
+            cursor.execute(
+                """
+                SELECT GREATEST(
+                    COALESCE((SELECT MAX(score) FROM yetamax_scores WHERE user_id = %s), 0),
+                    COALESCE((SELECT MAX(score) FROM maveric_scores WHERE user_id = %s), 0),
+                    COALESCE((SELECT MAX(score) FROM math_scores WHERE user_id = %s), 0),
+                    COALESCE((SELECT MAX(combined_score) FROM math_session_scores WHERE user_id = %s), 0)
+                )
+                """,
+                (user_id, user_id, user_id, user_id),
+            )
+            arithmetic_best = cursor.fetchone()[0]
+
         return {
             "username": username,
             "reaction_best": reaction_best,
             "memory_best": memory_best,
+            "arithmetic_best": arithmetic_best if arithmetic_best != 0 else None,
         }
     finally:
         conn.close()

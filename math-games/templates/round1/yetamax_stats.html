@@ -15,7 +15,7 @@
         <span>Logged in as <strong>{{ current_user.username }}</strong></span>
         <a href="/profile" class="auth-link">Profile</a>
         <span class="auth-separator">|</span>
-        <a href="/logout" class="auth-link">Logout</a>
+        <a href="/" class="auth-link">Home</a>
     </div>
     {% endif %}
 
@@ -26,8 +26,8 @@
                 <p class="subtitle">Score distribution and difficulty snapshot</p>
             </div>
             <div class="actions">
-                <a class="link" href="/math-game/yetamax">Play</a>
-                <a class="link" href="/math-game/yetamax/leaderboard">Leaderboard</a>
+                <a class="link" href="/math-game">Play</a>
+                <a class="link" href="/math-game/leaderboard">Leaderboard</a>
             </div>
         </header>
 
@@ -89,7 +89,7 @@
                 } else {
                     const table = document.createElement('table');
                     table.innerHTML = `
-                        <thead><tr><th>Expression</th><th>Avg time (ms)</th><th>Avg wrong</th><th>Samples</th></tr></thead>
+                        <thead><tr><th>Expression</th><th>Avg time (s)</th><th>Avg wrong</th><th>Samples</th></tr></thead>
                         <tbody></tbody>
                     `;
                     const tbody = table.querySelector('tbody');
@@ -98,7 +98,7 @@
                         const row = document.createElement('tr');
                         row.innerHTML = `
                             <td>${expr}</td>
-                            <td>${(item.avg_time_ms || 0).toFixed(1)}</td>
+                            <td>${((item.avg_time_ms || 0) / 1000).toFixed(2)}</td>
                             <td>${(item.avg_wrong_attempts || 0).toFixed(2)}</td>
                             <td>${item.samples || 0}</td>
                         `;

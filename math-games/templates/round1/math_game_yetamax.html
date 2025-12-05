@@ -16,7 +16,7 @@
         <span>Logged in as <strong>{{ current_user.username }}</strong></span>
         <a href="/profile" class="auth-link">Profile</a>
         <span class="auth-separator">|</span>
-        <a href="/logout" class="auth-link">Logout</a>
+        <a href="/" class="auth-link">Home</a>
     </div>
     {% endif %}
 
@@ -34,10 +34,10 @@
             <div class="instructions">
                 <p>This game has <strong>two back-to-back 90 second rounds</strong> with a short breather in between:</p>
                 <ul>
-                    <li><strong>Round 1 — Yetamax:</strong> Classic two-digit addition and subtraction, plus multiplication and division using factors 2–12. A new problem appears only after you enter the correct answer.</li>
-                    <li><strong>Round 2 — Maveric:</strong> Harder mixed arithmetic with large integer add/sub, integer/decimal division, decimal multipliers, percent problems, and missing-value equations.</li>
+                    <li><strong>Round 1 — Yetamax:</strong> Two-digit addition and subtraction, plus multiplication and division by factors 2–12. No new problem appears until you answer correctly.</li>
+                    <li><strong>Round 2 — Maveric:</strong> Harder mixes with larger integer add/sub, clean integer division and multipliers (no messy decimals), percent-of and percent-increase prompts, and missing-value equations.</li>
                 </ul>
-                <p>Both rounds use a <strong>30 second shot clock per question</strong>. If the timer hits zero the question auto-skips, counts as a timeout, and you move on. After Round 1 there’s a brief break before Round 2 begins automatically.</p>
+                <p>Every question has a <strong>30 second shot clock</strong>. If the timer hits zero the question auto-skips, counts as a timeout, and you move on. After Round 1 there’s a short break before Round 2 begins automatically.</p>
             </div>
             <button id="start-button" class="primary">Start the two-round sprint</button>
         </section>
@@ -45,7 +45,7 @@
         <section id="game-panel" class="panel hidden">
             <div class="instructions" id="instructions-block">
                 <p>You have 90 seconds. Type the correct answer to each problem. A new problem appears only after you enter the correct answer.</p>
-                <p><strong>Maveric (Round 2) mixes tougher arithmetic:</strong> large integer addition/subtraction, integer and decimal division, decimal multipliers, percents, and missing-value equations.</p>
+                <p><strong>Maveric (Round 2) mixes tougher arithmetic:</strong> larger integer addition/subtraction, clean integer division and multipliers (no messy decimals), percent problems, and missing-value equations.</p>
                 <p>Every question in both rounds has a 30 second cap—if time runs out it auto-skips, counts as a timeout, and moves you onward.</p>
                 <p id="desktop-line" class="device-line">On desktop, use your keyboard and press Enter to submit.</p>
                 <p id="mobile-line" class="device-line hidden">On mobile, you can use the on-screen number pad or your device keyboard to answer.</p>
@@ -94,7 +94,7 @@
 
         <section id="midround-panel" class="panel hidden">
             <h2>Round 1 complete</h2>
-            <p class="score-line">Get ready for Maveric. Round 2 is about to begin.</p>
+            <p class="score-line">Get ready for Maveric—questions get harder and switch formats. The 30s shot clock still applies.</p>
             <div class="countdown" id="round2-countdown">Starting Round 2 in 6...</div>
         </section>
 
@@ -115,7 +115,7 @@
                             <th>Correct</th>
                             <th>Wrong</th>
                             <th>Timed out</th>
-                            <th>Fastest (ms)</th>
+                            <th>Fastest (s)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -141,7 +141,7 @@
                     <h3>Round 1 by operator</h3>
                     <table>
                         <thead>
-                            <tr><th>Op</th><th>Count</th><th>Avg time (ms)</th></tr>
+                            <tr><th>Op</th><th>Count</th><th>Avg time (s)</th></tr>
                         </thead>
                         <tbody id="operator-rows"></tbody>
                     </table>
@@ -150,7 +150,7 @@
                     <h3>Round 2 by type</h3>
                     <table>
                         <thead>
-                            <tr><th>Type</th><th>Count</th><th>Avg time (ms)</th></tr>
+                            <tr><th>Type</th><th>Count</th><th>Avg time (s)</th></tr>
                         </thead>
                         <tbody id="round2-rows"></tbody>
                     </table>
@@ -159,8 +159,8 @@
             <div class="actions">
                 <button id="restart-button" class="primary">Play again</button>
                 <a class="link" href="/">Home</a>
-                <a class="link" href="/math-game/yetamax/leaderboard">Arithmetic Leaderboard</a>
-                <a class="link" href="/math-game/yetamax/stats">Stats</a>
+                <a class="link" href="/math-game/leaderboard">Arithmetic Leaderboard</a>
+                <a class="link" href="/math-game/stats">Stats</a>
             </div>
         </section>
     </div>

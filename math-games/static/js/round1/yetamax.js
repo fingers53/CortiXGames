@@ -153,6 +153,20 @@ function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function randomIntExcluding(min, max, excludedSet) {
+    if (excludedSet?.size) {
+        let value;
+        let safety = 0;
+        do {
+            value = randomInt(min, max);
+            safety += 1;
+        } while (excludedSet.has(value) && safety < 25);
+        if (!excludedSet.has(value)) return value;
+        // fallback if the range is too tight
+    }
+    return randomInt(min, max);
+}
+
 function randomDigitInt(digits) {
     const low = 10 ** (digits - 1);
     const high = 10 ** digits - 1;
@@ -179,20 +193,27 @@ function generateRound1Question() {
     let answer = 0;
 
     if (operator === '+') {
-        a = randomInt(addMin, addMax);
+        a = randomInt(Math.max(addMin, 13), addMax);
         b = randomInt(addMin, addMax);
         answer = a + b;
     } else if (operator === '-') {
-        a = randomInt(addMin, addMax);
-        b = randomInt(2, a);
+        a = randomInt(Math.max(addMin, 22), addMax);
+        const maxB = Math.max(2, a - 11);
+        b = randomInt(2, maxB);
         answer = a - b;
+        if (answer < 11) {
+            // guard against edge cases when ranges tighten
+            return generateRound1Question();
+        }
     } else if (operator === '*') {
-        a = randomInt(2, 12);
-        b = randomInt(mulBMin, 100);
+        const excluded = new Set([10]);
+        a = randomIntExcluding(2, 12, excluded);
+        b = randomIntExcluding(mulBMin, 100, excluded);
         answer = a * b;
     } else {
-        b = randomInt(2, 12);
-        const multiplier = randomInt(mulBMin, 100);
+        const excluded = new Set([10]);
+        b = randomIntExcluding(2, 12, excluded);
+        let multiplier = randomIntExcluding(mulBMin, 100, excluded);
         answer = multiplier;
         a = b * multiplier;
     }
@@ -348,16 +369,19 @@ function buildOperatorBreakdown(targetEl, statsMap) {
     targetEl.innerHTML = '';
     const entries = Object.entries(statsMap || {});
     if (!entries.length) {
-        targetEl.innerHTML = '<tr><td colspan="3">No answers recorded.</td></tr>';
+        targetEl.innerHTML = '<tr><td colspan="3">All questions skipped or timed out.</td></tr>';
         return;
     }
     entries.forEach(([op, info]) => {
-        const avg = info.count > 0 ? info.totalTime / info.count : 0;
+        const count = info.count ?? 0;
+        const totalTime = info.totalTime ?? (info.avg_time_ms != null ? info.avg_time_ms * count : 0);
+        const avg = count > 0 ? totalTime / count : 0;
+        const avgSeconds = Number.isFinite(avg) ? avg / 1000 : null;
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${op}</td>
-            <td>${info.count}</td>
-            <td>${avg.toFixed(1)}</td>
+            <td>${count}</td>
+            <td>${avgSeconds != null ? avgSeconds.toFixed(2) : '—'}</td>
         `;
         targetEl.appendChild(row);
     });
@@ -543,13 +567,13 @@ function showFinalResults(round2Score, combinedScore, typeBreakdown) {
     tableRound2Timeouts.textContent = roundStats[STATE.ROUND2].timedOutCount;
     tableRound2Fastest.textContent = formatFastest(roundStats[STATE.ROUND2].minTimeMs);
 
-    buildOperatorBreakdown(operatorRows, roundStats[STATE.ROUND1].typeStats);
-    buildOperatorBreakdown(round2Rows, typeBreakdown);
+            buildOperatorBreakdown(operatorRows, roundStats[STATE.ROUND1].typeStats);
+            buildOperatorBreakdown(round2Rows, typeBreakdown);
 }
 
 function formatFastest(value) {
     if (value === null || value === undefined) return '—';
-    return `${value.toFixed(1)}`;
+    return `${(value / 1000).toFixed(2)}`;
 }
 
 function answersMatch(expected, provided) {

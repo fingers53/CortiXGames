@@ -15,7 +15,7 @@
         <span>Logged in as <strong>{{ current_user.username }}</strong></span>
         <a href="/profile" class="auth-link">Profile</a>
         <span class="auth-separator">|</span>
-        <a href="/logout" class="auth-link">Logout</a>
+        <a href="/" class="auth-link">Home</a>
     </div>
     {% endif %}
 
@@ -26,8 +26,8 @@
                 <p class="subtitle">View top runs by round (90s each)</p>
             </div>
             <div class="actions">
-                <a class="link" href="/math-game/yetamax">Play</a>
-                <a class="link" href="/math-game/yetamax/stats">Stats</a>
+                <a class="link" href="/math-game">Play</a>
+                <a class="link" href="/math-game/stats">Stats</a>
             </div>
         </header>
 
@@ -44,7 +44,7 @@
                         <th>Score</th>
                         <th>Correct</th>
                         <th>Wrong</th>
-                        <th>Avg time (ms)</th>
+                        <th>Avg time (s)</th>
                         <th>Date</th>
                     </tr>
                 </thead>
@@ -91,7 +91,7 @@
                         <td>${row.score}</td>
                         <td>${row.correct_count}</td>
                         <td>${row.wrong_count}</td>
-                        <td>${Number(row.avg_time_ms).toFixed(1)}</td>
+                        <td>${(Number(row.avg_time_ms) / 1000).toFixed(2)}</td>
                         <td>${new Date(row.created_at).toLocaleString()}</td>
                     `;
                     body.appendChild(tr);

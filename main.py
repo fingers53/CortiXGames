@@ -642,19 +642,19 @@ def fetch_math_insights(conn, user_id: int) -> dict:
 
     def map_rows(avg_map):
         return [
-            {"type": key, "avg_time_ms": round(val, 2)}
+            {"type": key, "avg_time_s": round(val / 1000, 2)}
             for key, val in sorted(avg_map.items(), key=lambda kv: kv[0])
         ]
 
     return {
         "round1": {
             "best_score": best_r1,
-            "overall_avg": round(r1_overall, 2) if r1_overall else None,
+            "overall_avg": round(r1_overall / 1000, 2) if r1_overall else None,
             "averages": map_rows(r1_avgs),
         },
         "round2": {
             "best_score": best_r2,
-            "overall_avg": round(r2_overall, 2) if r2_overall else None,
+            "overall_avg": round(r2_overall / 1000, 2) if r2_overall else None,
             "averages": map_rows(r2_avgs),
         },
     }
@@ -1132,6 +1132,7 @@ async def memory_leaderboard_api():
         conn.close()
 
 
+@app.get("/math-game", response_class=HTMLResponse)
 @app.get("/math-game/yetamax", response_class=HTMLResponse)
 async def yetamax_game(request: Request, current_user=Depends(get_current_user)):
     if not current_user:
@@ -1145,6 +1146,7 @@ async def yetamax_game(request: Request, current_user=Depends(get_current_user))
     )
 
 
+@app.get("/math-game/leaderboard", response_class=HTMLResponse)
 @app.get("/math-game/yetamax/leaderboard", response_class=HTMLResponse)
 async def yetamax_leaderboard_page(
     request: Request, current_user=Depends(get_current_user)
@@ -1158,12 +1160,11 @@ async def yetamax_leaderboard_page(
     )
 
 
-@app.get("/math-game/maveric/leaderboard", response_class=HTMLResponse)
-async def maveric_leaderboard_page(
-    request: Request, current_user=Depends(get_current_user)
-):
+@app.get("/math-game/stats", response_class=HTMLResponse)
+@app.get("/math-game/yetamax/stats", response_class=HTMLResponse)
+async def yetamax_stats_page(request: Request, current_user=Depends(get_current_user)):
     return render_template(
-        "round2/maveric_leaderboard.html",
+        "round1/yetamax_stats.html",
         request,
         {
             "current_user": current_user,
@@ -1171,10 +1172,12 @@ async def maveric_leaderboard_page(
     )
 
 
-@app.get("/math-game/yetamax/stats", response_class=HTMLResponse)
-async def yetamax_stats_page(request: Request, current_user=Depends(get_current_user)):
+@app.get("/math-game/maveric/leaderboard", response_class=HTMLResponse)
+async def maveric_leaderboard_page(
+    request: Request, current_user=Depends(get_current_user)
+):
     return render_template(
-        "round1/yetamax_stats.html",
+        "round2/maveric_leaderboard.html",
         request,
         {
             "current_user": current_user,

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CortiX Games</title>
+    <link rel="stylesheet" href="/static/auth.css">
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px;
+        }
+        .leaderboard-button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+            font-weight: bold;
+            text-decoration: none;
+            color: black;
+        }
+        .leaderboard-button:hover {
+            background-color: #f4a460;
+            color: white;
+        }
+        .leaderboard-content {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    {% if current_user %}
+    <div class="auth-bar">
+        <span>Logged in as <strong>{{ current_user.username }}</strong></span>
+        <a href="/profile" class="auth-link">Profile</a>
+        <span class="auth-separator">|</span>
+        <a href="/" class="auth-link">Home</a>
+    </div>
+    {% endif %}
+    <div class="container">
+        <h1>Leaderboard</h1>
+
+        <!-- Buttons for navigating to each game's leaderboard -->
+        <div class="button-container" aria-label="Game leaderboards">
+            <a href="/leaderboard/reaction-game" class="leaderboard-button">Reaction Game</a>
+            <a href="/leaderboard/memory-game" class="leaderboard-button">Memory Game</a>
+            <a href="/math-game/leaderboard" class="leaderboard-button">Arithmetic</a>
+        </div>
+    </div>
+</body>
+</html>

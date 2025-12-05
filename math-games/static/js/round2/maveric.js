@@ -39,7 +39,7 @@
         const divisors = [3, 5, 7, 9, 12, 15, 16, 17, 48];
         const d = divisors[randomInt(0, divisors.length - 1)];
         const n = q * d;
-        return { expression: `${n} / ${d}`, answer: n / d, category: 'int_div_int' };
+        return { expression: `${n} / ${d}`, answer: q, category: 'int_div_int' };
     }
 
     function genIntMult() {
@@ -54,27 +54,28 @@
         const denoms = [0.2, 0.4, 0.8];
         const numerator = numerators[randomInt(0, numerators.length - 1)];
         const denom = denoms[randomInt(0, denoms.length - 1)];
-        return { expression: `${numerator} / ${denom}`, answer: numerator / denom, category: 'dec_div' };
+        return { expression: `${numerator} / ${denom}`, answer: Math.round(numerator / denom), category: 'dec_div' };
     }
 
     function genDecMult() {
-        const bases = [90, 120, 135, 144, 150, 160];
+        const bases = [120, 150, 180, 200, 240];
         const factors = [0.3, 0.4, 0.6];
         const base = bases[randomInt(0, bases.length - 1)];
         const factor = factors[randomInt(0, factors.length - 1)];
-        return { expression: `${base} × ${factor}`, answer: base * factor, category: 'dec_mult' };
+        const answer = Math.round(base * factor);
+        return { expression: `${base} × ${factor}`, answer, category: 'dec_mult' };
     }
 
     function genPercentOf() {
         const base = randomInt(150, 400);
         const pct = [25, 50, 75][randomInt(0, 2)];
-        return { expression: `${pct}% of ${base}`, answer: (base * pct) / 100, category: 'percent_of' };
+        return { expression: `${pct}% of ${base}`, answer: Math.round((base * pct) / 100), category: 'percent_of' };
     }
 
     function genPercentIncrease() {
-        const base = randomDigitInt(3);
+        const base = randomInt(10, 99) * 10;
         const pct = 10;
-        return { expression: `${base} + ${pct}%`, answer: base * 1.1, category: 'percent_increase' };
+        return { expression: `${base} + ${pct}%`, answer: Math.round(base * 1.1), category: 'percent_increase' };
     }
 
     function genMissingPercent() {
@@ -82,7 +83,7 @@
         const pctOptions = [25, 35, 50, 75];
         const pct = pctOptions[randomInt(0, pctOptions.length - 1)];
         const value = (base * pct) / 100;
-        return { expression: `_ % of ${base} = ${value.toFixed(1)}`, answer: pct, category: 'missing_percent' };
+        return { expression: `_ % of ${base} = ${value.toFixed(1)}`, answer: Math.round(pct), category: 'missing_percent' };
     }
 
     function genMissingEquation() {
@@ -100,7 +101,7 @@
             const denLeft = a;
             const denRight = [3, 4, 5, 6][randomInt(0, 3)];
             const numRight = (left * denRight) / denLeft;
-            return { expression: `${left} / ${denLeft} = _ / ${denRight}`, answer: numRight, category: 'missing_equation' };
+            return { expression: `${left} / ${denLeft} = _ / ${denRight}`, answer: Math.round(numRight), category: 'missing_equation' };
         }
 
         if (template === 'balance_add') {
@@ -109,7 +110,7 @@
             const total = x + y;
             const z = randomInt(50, 500);
             const missing = total - z;
-            return { expression: `${x} + ${y} = ${z} - _`, answer: missing, category: 'missing_equation' };
+            return { expression: `${x} + ${y} = ${z} - _`, answer: Math.round(missing), category: 'missing_equation' };
         }
 
         if (template === 'prod_missing') {
@@ -119,7 +120,7 @@
             const candidates = Array.from({ length: 19 }, (_, idx) => idx + 2).filter((d) => prod % d === 0);
             const c = candidates[randomInt(0, candidates.length - 1)];
             const missing = prod / c;
-            return { expression: `${a} × ${b} = ${c} × _`, answer: missing, category: 'missing_equation' };
+            return { expression: `${a} × ${b} = ${c} × _`, answer: Math.round(missing), category: 'missing_equation' };
         }
 
         const first = randomDigitInt(2);
@@ -127,7 +128,7 @@
         const tail = randomInt(10, 99);
         const second = 5000 + missingDigit * 100 + tail;
         const total = first + second;
-        return { expression: `${first} + 5_${tail} = ${total}`, answer: missingDigit, category: 'missing_equation' };
+        return { expression: `${first} + 5_${tail} = ${total}`, answer: Math.round(missingDigit), category: 'missing_equation' };
     }
 
     const round2Generators = [

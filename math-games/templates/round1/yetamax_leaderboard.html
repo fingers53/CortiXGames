@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yetamax Leaderboard</title>
+    <title>CortiX Games</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/auth.css">
     <link rel="stylesheet" href="/static/styles.css">
@@ -15,24 +15,27 @@
         <span>Logged in as <strong>{{ current_user.username }}</strong></span>
         <a href="/profile" class="auth-link">Profile</a>
         <span class="auth-separator">|</span>
-        <a href="/logout" class="auth-link">Logout</a>
+        <a href="/" class="auth-link">Home</a>
     </div>
     {% endif %}
 
     <div class="yetamax-container">
         <header class="yetamax-header">
             <div>
-                <h1>Yetamax Leaderboard</h1>
-                <p class="subtitle">Top 20 valid runs</p>
+                <h1>Arithmetic Leaderboard</h1>
+                <p class="subtitle">View top runs by round (90s each)</p>
             </div>
             <div class="actions">
-                <a class="link" href="/math-game/yetamax">Play</a>
-                <a class="link" href="/math-game/maveric/leaderboard">Round 2 Leaderboard</a>
-                <a class="link" href="/math-game/yetamax/stats">Stats</a>
+                <a class="link" href="/math-game">Play</a>
+                <a class="link" href="/math-game/stats">Stats</a>
             </div>
         </header>
 
         <section class="panel">
+            <div class="tab-row" role="tablist" aria-label="Arithmetic rounds">
+                <button class="tab active" data-round="round1" role="tab">Round 1 — Yetamax</button>
+                <button class="tab" data-round="round2" role="tab">Round 2 — Maveric</button>
+            </div>
             <table class="leaderboard-table">
                 <thead>
                     <tr>
@@ -41,28 +44,45 @@
                         <th>Score</th>
                         <th>Correct</th>
                         <th>Wrong</th>
-                        <th>Avg time (ms)</th>
+                        <th>Avg time (s)</th>
                         <th>Date</th>
                     </tr>
                 </thead>
-                <tbody id="leaderboard-body">
-                    <tr><td colspan="7">Loading...</td></tr>
-                </tbody>
+                <tbody id="leaderboard-body"></tbody>
             </table>
         </section>
     </div>
 
     <script>
-        fetch('/api/math-game/yetamax/leaderboard')
-            .then((resp) => resp.json())
-            .then((data) => {
-                const body = document.getElementById('leaderboard-body');
-                body.innerHTML = '';
+        const endpoints = {
+            round1: '/api/math-game/yetamax/leaderboard',
+            round2: '/api/math-game/maveric/leaderboard',
+        };
+
+        function setActiveTab(roundKey) {
+            document.querySelectorAll('.tab').forEach((btn) => {
+                if (btn.dataset.round === roundKey) {
+                    btn.classList.add('active');
+                    btn.setAttribute('aria-selected', 'true');
+                } else {
+                    btn.classList.remove('active');
+                    btn.setAttribute('aria-selected', 'false');
+                }
+            });
+        }
+
+        async function loadLeaderboard(roundKey) {
+            const body = document.getElementById('leaderboard-body');
+            body.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
+            try {
+                const resp = await fetch(endpoints[roundKey]);
+                const data = await resp.json();
                 const scores = data.scores || [];
                 if (!scores.length) {
                     body.innerHTML = '<tr><td colspan="7">No scores yet.</td></tr>';
                     return;
                 }
+                body.innerHTML = '';
                 scores.forEach((row, idx) => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
@@ -71,16 +91,27 @@
                         <td>${row.score}</td>
                         <td>${row.correct_count}</td>
                         <td>${row.wrong_count}</td>
-                        <td>${row.avg_time_ms.toFixed(1)}</td>
+                        <td>${(Number(row.avg_time_ms) / 1000).toFixed(2)}</td>
                         <td>${new Date(row.created_at).toLocaleString()}</td>
                     `;
                     body.appendChild(tr);
                 });
-            })
-            .catch(() => {
-                const body = document.getElementById('leaderboard-body');
+            } catch (err) {
+                console.error('Failed to load leaderboard', err);
                 body.innerHTML = '<tr><td colspan="7">Could not load leaderboard.</td></tr>';
+            }
+        }
+
+        document.querySelectorAll('.tab').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const roundKey = btn.dataset.round;
+                setActiveTab(roundKey);
+                loadLeaderboard(roundKey);
             });
+        });
+
+        setActiveTab('round1');
+        loadLeaderboard('round1');
     </script>
 </body>
 </html>

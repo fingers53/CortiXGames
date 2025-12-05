@@ -404,13 +404,20 @@ def compute_memory_scores(question_log: List[Dict]) -> tuple[float, float, float
             round_scores[round_num] -= 1.0
 
 
-def calculate_yetamax_score(correct_count: int, wrong_count: int, avg_time_ms: float) -> int:
-    speed_bonus = 0
-    if avg_time_ms > 0:
-        speed_bonus = max(0, int(3000 / avg_time_ms))
+def calculate_yetamax_score(
+    correct_count: int, wrong_count: int, avg_time_ms: float, per_questions=None
+) -> int:
     base_score = correct_count * 10
     penalty = wrong_count * 2
-    return base_score - penalty + speed_bonus
+
+    streak_penalty = 0
+    if per_questions:
+        for entry in per_questions:
+            wrong_attempts = int(entry.get("wrong_attempts") or 0)
+            if wrong_attempts > 1:
+                streak_penalty += wrong_attempts - 1
+
+    return base_score - penalty - streak_penalty
 
     r1 = round_scores[1]
     r2 = round_scores[2]
@@ -447,10 +454,18 @@ def fetch_recent_attempts(conn, user_id: int) -> List[dict]:
             SELECT 'memory' AS game, total_score AS score, created_at
             FROM memory_scores
             WHERE user_id = %s
+            UNION ALL
+            SELECT 'arithmetic_r1' AS game, score AS score, created_at
+            FROM yetamax_scores
+            WHERE user_id = %s
+            UNION ALL
+            SELECT 'arithmetic_r2' AS game, score AS score, created_at
+            FROM maveric_scores
+            WHERE user_id = %s
             ORDER BY created_at DESC
             LIMIT 20
             """,
-            (user_id, user_id),
+            (user_id, user_id, user_id, user_id),
         )
         return cursor.fetchall()
 
@@ -573,6 +588,85 @@ def fetch_memory_insights(conn, user_id: int) -> dict:
     }
 
 
+def summarize_math_times(rows: list, question_key: str) -> tuple[dict, float]:
+    type_totals: dict[str, float] = {}
+    type_counts: dict[str, int] = {}
+    overall_total = 0.0
+    overall_count = 0
+
+    for row in rows:
+        payload = row.get("raw_payload") or {}
+        questions = payload.get(question_key) or payload.get("per_question_times") or []
+        for q in questions:
+            if q.get("timed_out"):
+                continue
+            key = q.get("category") or q.get("operator")
+            if not key:
+                continue
+            time_val = q.get("time_ms")
+            if time_val is None:
+                continue
+            type_totals[key] = type_totals.get(key, 0) + float(time_val)
+            type_counts[key] = type_counts.get(key, 0) + 1
+            overall_total += float(time_val)
+            overall_count += 1
+
+    type_avgs = {
+        key: (type_totals[key] / type_counts[key]) for key in type_totals if type_counts.get(key)
+    }
+    overall_avg = overall_total / overall_count if overall_count else None
+    return type_avgs, overall_avg
+
+
+def fetch_math_insights(conn, user_id: int) -> dict:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+        cursor.execute(
+            "SELECT raw_payload, score FROM yetamax_scores WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
+            (user_id,),
+        )
+        round1_rows = cursor.fetchall()
+
+        cursor.execute(
+            "SELECT raw_payload, score FROM maveric_scores WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
+            (user_id,),
+        )
+        round2_rows = cursor.fetchall()
+
+        cursor.execute(
+            "SELECT MAX(score) FROM yetamax_scores WHERE user_id = %s",
+            (user_id,),
+        )
+        best_r1 = cursor.fetchone()[0]
+
+        cursor.execute(
+            "SELECT MAX(score) FROM maveric_scores WHERE user_id = %s",
+            (user_id,),
+        )
+        best_r2 = cursor.fetchone()[0]
+
+    r1_avgs, r1_overall = summarize_math_times(round1_rows, "per_question_times")
+    r2_avgs, r2_overall = summarize_math_times(round2_rows, "per_question")
+
+    def map_rows(avg_map):
+        return [
+            {"type": key, "avg_time_s": round(val / 1000, 2)}
+            for key, val in sorted(avg_map.items(), key=lambda kv: kv[0])
+        ]
+
+    return {
+        "round1": {
+            "best_score": best_r1,
+            "overall_avg": round(r1_overall / 1000, 2) if r1_overall else None,
+            "averages": map_rows(r1_avgs),
+        },
+        "round2": {
+            "best_score": best_r2,
+            "overall_avg": round(r2_overall / 1000, 2) if r2_overall else None,
+            "averages": map_rows(r2_avgs),
+        },
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request, current_user=Depends(get_current_user)):
     return render_template("landing_page.html", request, {"current_user": current_user})
@@ -580,27 +674,27 @@ async def landing_page(request: Request, current_user=Depends(get_current_user))
 
 @app.get("/memory-game", response_class=HTMLResponse)
 async def memory_game(request: Request, current_user=Depends(get_current_user)):
-    return render_template("memory_game.html", request, {"current_user": current_user})
+    return render_template("games/memory_game.html", request, {"current_user": current_user})
 
 
 @app.get("/reaction-game", response_class=HTMLResponse)
 async def reaction_game(request: Request, current_user=Depends(get_current_user)):
-    return render_template("reaction_game.html", request, {"current_user": current_user})
+    return render_template("games/reaction_game.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard", response_class=HTMLResponse)
 async def leaderboard(request: Request, current_user=Depends(get_current_user)):
-    return render_template("leaderboard.html", request, {"current_user": current_user})
+    return render_template("leaderboards/leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/reaction-game", response_class=HTMLResponse)
 async def reaction_game_leaderboard(request: Request, current_user=Depends(get_current_user)):
-    return render_template("reaction_leaderboard.html", request, {"current_user": current_user})
+    return render_template("leaderboards/reaction_leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/memory-game", response_class=HTMLResponse)
 async def memory_game_leaderboard(request: Request, current_user=Depends(get_current_user)):
-    return render_template("memory_leaderboard.html", request, {"current_user": current_user})
+    return render_template("leaderboards/memory_leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/yetamax", response_class=HTMLResponse)
@@ -746,6 +840,7 @@ async def profile(request: Request, current_user=Depends(get_current_user)):
         attempts = fetch_recent_attempts(conn, current_user["id"])
         reaction_insights = fetch_reaction_insights(conn, current_user["id"])
         memory_insights = fetch_memory_insights(conn, current_user["id"])
+        math_insights = fetch_math_insights(conn, current_user["id"])
     finally:
         conn.close()
 
@@ -757,6 +852,7 @@ async def profile(request: Request, current_user=Depends(get_current_user)):
             "attempts": attempts,
             "reaction_insights": reaction_insights,
             "memory_insights": memory_insights,
+            "math_insights": math_insights,
         },
     )
 
@@ -777,6 +873,7 @@ async def update_flag(
             attempts = fetch_recent_attempts(conn, current_user["id"])
             reaction_insights = fetch_reaction_insights(conn, current_user["id"])
             memory_insights = fetch_memory_insights(conn, current_user["id"])
+            math_insights = fetch_math_insights(conn, current_user["id"])
         finally:
             conn.close()
         return render_template(
@@ -787,6 +884,7 @@ async def update_flag(
                 "attempts": attempts,
                 "reaction_insights": reaction_insights,
                 "memory_insights": memory_insights,
+                "math_insights": math_insights,
                 "error": "Please provide a two-letter country code (e.g., US, GB).",
             },
         )
@@ -802,6 +900,7 @@ async def update_flag(
         attempts = fetch_recent_attempts(conn, current_user["id"])
         reaction_insights = fetch_reaction_insights(conn, current_user["id"])
         memory_insights = fetch_memory_insights(conn, current_user["id"])
+        math_insights = fetch_math_insights(conn, current_user["id"])
     finally:
         conn.close()
 
@@ -815,6 +914,7 @@ async def update_flag(
             "attempts": attempts,
             "reaction_insights": reaction_insights,
             "memory_insights": memory_insights,
+            "math_insights": math_insights,
             "message": "Flag updated for your account.",
         },
     )
@@ -1039,6 +1139,7 @@ async def memory_leaderboard_api():
         conn.close()
 
 
+@app.get("/math-game", response_class=HTMLResponse)
 @app.get("/math-game/yetamax", response_class=HTMLResponse)
 async def yetamax_game(request: Request, current_user=Depends(get_current_user)):
     if not current_user:
@@ -1052,6 +1153,7 @@ async def yetamax_game(request: Request, current_user=Depends(get_current_user))
     )
 
 
+@app.get("/math-game/leaderboard", response_class=HTMLResponse)
 @app.get("/math-game/yetamax/leaderboard", response_class=HTMLResponse)
 async def yetamax_leaderboard_page(
     request: Request, current_user=Depends(get_current_user)
@@ -1065,12 +1167,11 @@ async def yetamax_leaderboard_page(
     )
 
 
-@app.get("/math-game/maveric/leaderboard", response_class=HTMLResponse)
-async def maveric_leaderboard_page(
-    request: Request, current_user=Depends(get_current_user)
-):
+@app.get("/math-game/stats", response_class=HTMLResponse)
+@app.get("/math-game/yetamax/stats", response_class=HTMLResponse)
+async def yetamax_stats_page(request: Request, current_user=Depends(get_current_user)):
     return render_template(
-        "round2/maveric_leaderboard.html",
+        "round1/yetamax_stats.html",
         request,
         {
             "current_user": current_user,
@@ -1078,10 +1179,12 @@ async def maveric_leaderboard_page(
     )
 
 
-@app.get("/math-game/yetamax/stats", response_class=HTMLResponse)
-async def yetamax_stats_page(request: Request, current_user=Depends(get_current_user)):
+@app.get("/math-game/maveric/leaderboard", response_class=HTMLResponse)
+async def maveric_leaderboard_page(
+    request: Request, current_user=Depends(get_current_user)
+):
     return render_template(
-        "round1/yetamax_stats.html",
+        "round2/maveric_leaderboard.html",
         request,
         {
             "current_user": current_user,
@@ -1108,7 +1211,9 @@ async def submit_yetamax_score(
         raise HTTPException(status_code=422, detail="Counts must be non-negative")
 
     is_valid = not (min_time_ms < 150)
-    score_value = calculate_yetamax_score(correct_count, wrong_count, avg_time_ms)
+    score_value = calculate_yetamax_score(
+        correct_count, wrong_count, avg_time_ms, per_question_times
+    )
 
     raw_payload = data.copy()
     raw_payload.update({"score": score_value, "is_valid": is_valid})
@@ -1175,7 +1280,9 @@ async def submit_maveric_score(
         raise HTTPException(status_code=422, detail="Counts must be non-negative")
 
     is_valid = not (min_time_ms < 150)
-    score_value = calculate_yetamax_score(correct_count, wrong_count, avg_time_ms)
+    score_value = calculate_yetamax_score(
+        correct_count, wrong_count, avg_time_ms, per_question
+    )
 
     raw_payload = data.copy()
     raw_payload.update({"score": score_value, "is_valid": is_valid})

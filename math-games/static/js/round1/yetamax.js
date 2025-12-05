@@ -54,9 +54,14 @@ const combinedScoreLine = document.getElementById('combined-score-line');
 const resultRound1Score = document.getElementById('result-round1-score');
 const resultRound2Score = document.getElementById('result-round2-score');
 const resultCombinedScore = document.getElementById('result-combined-score');
-const resultRound2Min = document.getElementById('result-round2-min');
-const resultRound1Timeouts = document.getElementById('result-round1-timeouts');
-const resultRound2Timeouts = document.getElementById('result-round2-timeouts');
+const tableRound1Correct = document.getElementById('table-round1-correct');
+const tableRound1Wrong = document.getElementById('table-round1-wrong');
+const tableRound1Timeouts = document.getElementById('table-round1-timeouts');
+const tableRound1Fastest = document.getElementById('table-round1-fastest');
+const tableRound2Correct = document.getElementById('table-round2-correct');
+const tableRound2Wrong = document.getElementById('table-round2-wrong');
+const tableRound2Timeouts = document.getElementById('table-round2-timeouts');
+const tableRound2Fastest = document.getElementById('table-round2-fastest');
 const operatorRows = document.getElementById('operator-rows');
 const round2Rows = document.getElementById('round2-rows');
 
@@ -148,6 +153,20 @@ function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function randomIntExcluding(min, max, excludedSet) {
+    if (excludedSet?.size) {
+        let value;
+        let safety = 0;
+        do {
+            value = randomInt(min, max);
+            safety += 1;
+        } while (excludedSet.has(value) && safety < 25);
+        if (!excludedSet.has(value)) return value;
+        // fallback if the range is too tight
+    }
+    return randomInt(min, max);
+}
+
 function randomDigitInt(digits) {
     const low = 10 ** (digits - 1);
     const high = 10 ** digits - 1;
@@ -174,20 +193,27 @@ function generateRound1Question() {
     let answer = 0;
 
     if (operator === '+') {
-        a = randomInt(addMin, addMax);
+        a = randomInt(Math.max(addMin, 13), addMax);
         b = randomInt(addMin, addMax);
         answer = a + b;
     } else if (operator === '-') {
-        a = randomInt(addMin, addMax);
-        b = randomInt(2, a);
+        a = randomInt(Math.max(addMin, 22), addMax);
+        const maxB = Math.max(2, a - 11);
+        b = randomInt(2, maxB);
         answer = a - b;
+        if (answer < 11) {
+            // guard against edge cases when ranges tighten
+            return generateRound1Question();
+        }
     } else if (operator === '*') {
-        a = randomInt(2, 12);
-        b = randomInt(mulBMin, 100);
+        const excluded = new Set([10]);
+        a = randomIntExcluding(2, 12, excluded);
+        b = randomIntExcluding(mulBMin, 100, excluded);
         answer = a * b;
     } else {
-        b = randomInt(2, 12);
-        const multiplier = randomInt(mulBMin, 100);
+        const excluded = new Set([10]);
+        b = randomIntExcluding(2, 12, excluded);
+        let multiplier = randomIntExcluding(mulBMin, 100, excluded);
         answer = multiplier;
         a = b * multiplier;
     }
@@ -225,6 +251,7 @@ function showQuestion(question) {
     questionText.textContent = question.expression;
     feedbackEl.textContent = '';
     answerInput.value = '';
+    answerInput.classList.remove('input-error', 'shake');
     answerInput.focus();
     startQuestionTimer();
 }
@@ -269,6 +296,11 @@ function handleWrongAnswer() {
     wrongAttemptsForCurrent += 1;
     updateHud(stats);
     feedbackEl.textContent = 'Try again';
+    answerInput.value = '';
+    answerInput.classList.remove('shake');
+    // force reflow so animation can replay
+    void answerInput.offsetWidth;
+    answerInput.classList.add('input-error', 'shake');
 }
 
 function handleQuestionTimeout() {
@@ -333,26 +365,33 @@ function calculateAvgTime(stats) {
 }
 
 function calculateLocalScore(stats) {
-    const avgTimeMs = calculateAvgTime(stats);
-    const safeAvg = avgTimeMs > 0 ? avgTimeMs : Number.POSITIVE_INFINITY;
-    const speedBonus = safeAvg === Infinity ? 0 : Math.max(0, Math.floor(3000 / safeAvg));
-    return stats.correctCount * 10 - stats.wrongCount * 2 + speedBonus;
+    let streakPenalty = 0;
+    stats.perQuestions.forEach((q) => {
+        const wrongAttempts = q.wrong_attempts || 0;
+        if (wrongAttempts > 1) {
+            streakPenalty += wrongAttempts - 1;
+        }
+    });
+    return stats.correctCount * 10 - stats.wrongCount * 2 - streakPenalty;
 }
 
 function buildOperatorBreakdown(targetEl, statsMap) {
     targetEl.innerHTML = '';
     const entries = Object.entries(statsMap || {});
     if (!entries.length) {
-        targetEl.innerHTML = '<tr><td colspan="3">No answers recorded.</td></tr>';
+        targetEl.innerHTML = '<tr><td colspan="3">All questions skipped or timed out.</td></tr>';
         return;
     }
     entries.forEach(([op, info]) => {
-        const avg = info.count > 0 ? info.totalTime / info.count : 0;
+        const count = info.count ?? 0;
+        const totalTime = info.totalTime ?? (info.avg_time_ms != null ? info.avg_time_ms * count : 0);
+        const avg = count > 0 ? totalTime / count : 0;
+        const avgSeconds = Number.isFinite(avg) ? avg / 1000 : null;
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${op}</td>
-            <td>${info.count}</td>
-            <td>${avg.toFixed(1)}</td>
+            <td>${count}</td>
+            <td>${avgSeconds != null ? avgSeconds.toFixed(2) : '—'}</td>
         `;
         targetEl.appendChild(row);
     });
@@ -527,12 +566,24 @@ function showFinalResults(round2Score, combinedScore, typeBreakdown) {
     resultRound1Score.textContent = round1Score;
     resultRound2Score.textContent = round2Score;
     resultCombinedScore.textContent = combinedScore;
-    resultRound2Min.textContent = `${(roundStats[STATE.ROUND2].minTimeMs ?? 0).toFixed(1)} ms`;
-    resultRound1Timeouts.textContent = roundStats[STATE.ROUND1].timedOutCount;
-    resultRound2Timeouts.textContent = roundStats[STATE.ROUND2].timedOutCount;
 
-    buildOperatorBreakdown(operatorRows, roundStats[STATE.ROUND1].typeStats);
-    buildOperatorBreakdown(round2Rows, typeBreakdown);
+    tableRound1Correct.textContent = roundStats[STATE.ROUND1].correctCount;
+    tableRound1Wrong.textContent = roundStats[STATE.ROUND1].wrongCount;
+    tableRound1Timeouts.textContent = roundStats[STATE.ROUND1].timedOutCount;
+    tableRound1Fastest.textContent = formatFastest(roundStats[STATE.ROUND1].minTimeMs);
+
+    tableRound2Correct.textContent = roundStats[STATE.ROUND2].correctCount;
+    tableRound2Wrong.textContent = roundStats[STATE.ROUND2].wrongCount;
+    tableRound2Timeouts.textContent = roundStats[STATE.ROUND2].timedOutCount;
+    tableRound2Fastest.textContent = formatFastest(roundStats[STATE.ROUND2].minTimeMs);
+
+            buildOperatorBreakdown(operatorRows, roundStats[STATE.ROUND1].typeStats);
+            buildOperatorBreakdown(round2Rows, typeBreakdown);
+}
+
+function formatFastest(value) {
+    if (value === null || value === undefined) return '—';
+    return `${(value / 1000).toFixed(2)}`;
 }
 
 function answersMatch(expected, provided) {

@@ -365,10 +365,14 @@ function calculateAvgTime(stats) {
 }
 
 function calculateLocalScore(stats) {
-    const avgTimeMs = calculateAvgTime(stats);
-    const safeAvg = avgTimeMs > 0 ? avgTimeMs : Number.POSITIVE_INFINITY;
-    const speedBonus = safeAvg === Infinity ? 0 : Math.max(0, Math.floor(3000 / safeAvg));
-    return stats.correctCount * 10 - stats.wrongCount * 2 + speedBonus;
+    let streakPenalty = 0;
+    stats.perQuestions.forEach((q) => {
+        const wrongAttempts = q.wrong_attempts || 0;
+        if (wrongAttempts > 1) {
+            streakPenalty += wrongAttempts - 1;
+        }
+    });
+    return stats.correctCount * 10 - stats.wrongCount * 2 - streakPenalty;
 }
 
 function buildOperatorBreakdown(targetEl, statsMap) {

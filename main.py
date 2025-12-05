@@ -404,13 +404,20 @@ def compute_memory_scores(question_log: List[Dict]) -> tuple[float, float, float
             round_scores[round_num] -= 1.0
 
 
-def calculate_yetamax_score(correct_count: int, wrong_count: int, avg_time_ms: float) -> int:
-    speed_bonus = 0
-    if avg_time_ms > 0:
-        speed_bonus = max(0, int(3000 / avg_time_ms))
+def calculate_yetamax_score(
+    correct_count: int, wrong_count: int, avg_time_ms: float, per_questions=None
+) -> int:
     base_score = correct_count * 10
     penalty = wrong_count * 2
-    return base_score - penalty + speed_bonus
+
+    streak_penalty = 0
+    if per_questions:
+        for entry in per_questions:
+            wrong_attempts = int(entry.get("wrong_attempts") or 0)
+            if wrong_attempts > 1:
+                streak_penalty += wrong_attempts - 1
+
+    return base_score - penalty - streak_penalty
 
     r1 = round_scores[1]
     r2 = round_scores[2]
@@ -1204,7 +1211,9 @@ async def submit_yetamax_score(
         raise HTTPException(status_code=422, detail="Counts must be non-negative")
 
     is_valid = not (min_time_ms < 150)
-    score_value = calculate_yetamax_score(correct_count, wrong_count, avg_time_ms)
+    score_value = calculate_yetamax_score(
+        correct_count, wrong_count, avg_time_ms, per_question_times
+    )
 
     raw_payload = data.copy()
     raw_payload.update({"score": score_value, "is_valid": is_valid})
@@ -1271,7 +1280,9 @@ async def submit_maveric_score(
         raise HTTPException(status_code=422, detail="Counts must be non-negative")
 
     is_valid = not (min_time_ms < 150)
-    score_value = calculate_yetamax_score(correct_count, wrong_count, avg_time_ms)
+    score_value = calculate_yetamax_score(
+        correct_count, wrong_count, avg_time_ms, per_question
+    )
 
     raw_payload = data.copy()
     raw_payload.update({"score": score_value, "is_valid": is_valid})

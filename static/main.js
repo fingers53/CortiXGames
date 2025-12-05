@@ -167,6 +167,7 @@ window.addEventListener("DOMContentLoaded", () => {
     hydrateUsernameField();
     attachNavigation("memory-button", "/memory-game");
     attachNavigation("reaction-button", "/reaction-game");
+    attachNavigation("yetamax-button", "/math-game/yetamax");
 });
 
 window.confirmUsername = confirmUsername;

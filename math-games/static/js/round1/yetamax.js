@@ -198,7 +198,7 @@ function generateRound1Question() {
 
 // Round 2 generators per spec
 function genIntAddSub() {
-    const digits = Math.random() < 0.75 ? 4 : 5;
+    const digits = Math.random() < 0.7 ? 3 : 4;
     let a = randomDigitInt(digits);
     let b = randomDigitInt(digits);
     const op = Math.random() < 0.5 ? '+' : '-';
@@ -212,7 +212,7 @@ function genIntAddSub() {
 }
 
 function genIntDivInt() {
-    const q = randomInt(6, 99);
+    const q = randomInt(6, 80);
     const divisors = [3, 5, 7, 9, 12, 15, 16, 17, 48];
     const d = divisors[randomInt(0, divisors.length - 1)];
     const n = q * d;
@@ -220,8 +220,8 @@ function genIntDivInt() {
 }
 
 function genIntMult() {
-    const a = randomInt(24, 999);
-    const factors = [6, 7, 8, 9, 12, 18];
+    const a = randomInt(24, 499);
+    const factors = [6, 7, 8, 9, 12];
     const b = factors[randomInt(0, factors.length - 1)];
     return { expression: `${a} × ${b}`, answer: a * b, category: 'int_mult' };
 }
@@ -235,8 +235,8 @@ function genDecDiv() {
 }
 
 function genDecMult() {
-    const bases = [120, 135, 144, 150, 160, 180, 200];
-    const factors = [0.3, 0.4, 0.6, 0.7];
+    const bases = [90, 120, 135, 144, 150, 160];
+    const factors = [0.3, 0.4, 0.6];
     const base = bases[randomInt(0, bases.length - 1)];
     const factor = factors[randomInt(0, factors.length - 1)];
     return { expression: `${base} × ${factor}`, answer: base * factor, category: 'dec_mult' };
@@ -263,7 +263,12 @@ function genMissingPercent() {
 }
 
 function genMissingEquation() {
-    const template = ['proportion', 'balance_add', 'prod_missing', 'digit_missing'][randomInt(0, 3)];
+    const template = weightedChoice({
+        proportion: 4,
+        balance_add: 3,
+        prod_missing: 2,
+        digit_missing: 1,
+    });
 
     if (template === 'proportion') {
         const a = randomInt(4, 12);
@@ -276,10 +281,10 @@ function genMissingEquation() {
     }
 
     if (template === 'balance_add') {
-        const x = randomInt(100, 999);
-        const y = randomInt(100, 999);
+        const x = randomInt(50, 500);
+        const y = randomInt(50, 500);
         const total = x + y;
-        const z = randomInt(100, 999);
+        const z = randomInt(50, 500);
         const missing = total - z;
         return { expression: `${x} + ${y} = ${z} - _`, answer: missing, category: 'missing_equation' };
     }
@@ -294,7 +299,7 @@ function genMissingEquation() {
         return { expression: `${a} × ${b} = ${c} × _`, answer: missing, category: 'missing_equation' };
     }
 
-    const first = randomDigitInt(3);
+    const first = randomDigitInt(2);
     const missingDigit = randomInt(0, 9);
     const tail = randomInt(10, 99);
     const second = 5000 + missingDigit * 100 + tail;
@@ -314,7 +319,7 @@ const round2Generators = [
     genMissingPercent,
 ];
 
-const round2Weights = [21, 8, 6, 4, 4, 2, 2, 2, 1];
+const round2Weights = [28, 6, 8, 6, 3, 1, 1, 2, 1];
 
 function generateRound2Question() {
     const totalWeight = round2Weights.reduce((sum, val) => sum + val, 0);

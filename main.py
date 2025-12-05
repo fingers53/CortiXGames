@@ -674,27 +674,27 @@ async def landing_page(request: Request, current_user=Depends(get_current_user))
 
 @app.get("/memory-game", response_class=HTMLResponse)
 async def memory_game(request: Request, current_user=Depends(get_current_user)):
-    return render_template("memory_game.html", request, {"current_user": current_user})
+    return render_template("games/memory_game.html", request, {"current_user": current_user})
 
 
 @app.get("/reaction-game", response_class=HTMLResponse)
 async def reaction_game(request: Request, current_user=Depends(get_current_user)):
-    return render_template("reaction_game.html", request, {"current_user": current_user})
+    return render_template("games/reaction_game.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard", response_class=HTMLResponse)
 async def leaderboard(request: Request, current_user=Depends(get_current_user)):
-    return render_template("leaderboard.html", request, {"current_user": current_user})
+    return render_template("leaderboards/leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/reaction-game", response_class=HTMLResponse)
 async def reaction_game_leaderboard(request: Request, current_user=Depends(get_current_user)):
-    return render_template("reaction_leaderboard.html", request, {"current_user": current_user})
+    return render_template("leaderboards/reaction_leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/memory-game", response_class=HTMLResponse)
 async def memory_game_leaderboard(request: Request, current_user=Depends(get_current_user)):
-    return render_template("memory_leaderboard.html", request, {"current_user": current_user})
+    return render_template("leaderboards/memory_leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/yetamax", response_class=HTMLResponse)

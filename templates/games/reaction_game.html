@@ -7,7 +7,7 @@
     <meta name="csrf-token" content="{{ csrf_token }}">
     <title>CortiX Games</title>
     <link rel="stylesheet" href="/static/auth.css">
-    <link rel="stylesheet" href="/static/memory_game.css">
+    <link rel="stylesheet" href="/static/games/reaction/reaction_game.css">
 </head>
 <body>
     {% if current_user %}
@@ -27,12 +27,45 @@
         </form>
     </div>
     {% endif %}
-    <div id="gameContainer">
-        <div id="timerDisplay"></div>
-        <canvas id="gameCanvas"></canvas>
-        <div id="introDisplay" class="overlay"></div>
-        <div id="feedbackOverlay" class="overlay"></div>
-        <div id="memoryEndScreen" class="end-screen" style="display: none;"></div>
+    <div id="instruction-box" class="instruction-box">
+        <h2>Reaction Game Instructions</h2>
+        <p>Place your hands on the 0 and 1 keys.</p>
+        <p>0 = Right, 1 = Left.</p>
+        <p>Match the side whose ball matches the center ball.</p>
+        <p>On mobile: you can tap the LEFT or RIGHT buttons.</p>
+        <p>React as fast as possible!</p>
+        <button id="start-game-button" class="start-button">Start Game</button>
+    </div>
+    <div id="game-container" class="game-container">
+        <div class="header">
+            <h1>Reaction Game</h1>
+            <div id="timer">45</div>
+        </div>
+
+        <div class="game-area">
+            <div id="left-ball" class="ball"></div>
+            <div id="center-ball" class="ball center"></div>
+            <div id="right-ball" class="ball"></div>
+        </div>
+
+        <div class="button-container">
+            <button class="game-button" onclick="chooseSide('left')">Left (1)</button>
+            <button class="game-button" onclick="chooseSide('right')">Right (0)</button>
+        </div>
+    </div>
+
+    <div id="countdown" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 72px; color: white;"></div>
+
+    <div id="end-screen" style="display: none;">
+        <h1 id="final-score">Final Score:</h1>
+        <div class="score-breakdown">
+            <div class="column" id="score-column"></div>
+            <div class="column" id="speed-column"></div>
+            <div class="column" id="streaks-column"></div>
+        </div>
+        <button onclick="resetGame()">Play Again</button>
+        <button onclick="window.location.href='/'">Home</button>
+        <button onclick="window.location.href='/leaderboard/reaction-game'">Leaderboard</button>
     </div>
 
     <script>
@@ -49,7 +82,7 @@
             }
         })();
     </script>
-    <script type="module" src="/static/memory_game.js"></script>
+    <script src="/static/games/reaction/reaction_game.js"></script>
     <script>
         {% if current_user %}
         localStorage.setItem("username", {{ current_user.username | tojson }});

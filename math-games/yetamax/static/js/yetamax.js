@@ -40,6 +40,13 @@ const resultMin = document.getElementById('result-min');
 const operatorRows = document.getElementById('operator-rows');
 const restartButton = document.getElementById('restart-button');
 const startButton = document.getElementById('start-button');
+const desktopLine = document.getElementById('desktop-line');
+const mobileLine = document.getElementById('mobile-line');
+const keypad = document.getElementById('keypad');
+
+const isMobile =
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') ||
+    (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches);
 
 function resetStats() {
     correctCount = 0;
@@ -58,6 +65,18 @@ function resetStats() {
 function updateHud() {
     correctCountEl.textContent = correctCount;
     wrongCountEl.textContent = wrongCount;
+}
+
+function applyDeviceUi() {
+    if (isMobile) {
+        keypad?.classList.remove('hidden');
+        mobileLine?.classList.remove('hidden');
+        desktopLine?.classList.add('hidden');
+    } else {
+        keypad?.classList.add('hidden');
+        mobileLine?.classList.add('hidden');
+        desktopLine?.classList.remove('hidden');
+    }
 }
 
 function weightedChoice(weights) {
@@ -283,18 +302,43 @@ function endGame(endedByTimeout) {
     });
 }
 
-answerForm?.addEventListener('submit', (event) => {
-    event.preventDefault();
+function handleAnswerSubmit() {
     if (!gameActive) return;
-
-    const value = Number(answerInput.value.trim());
+    const trimmed = answerInput.value.trim();
+    if (trimmed === '') return;
+    const value = Number(trimmed);
     if (!Number.isFinite(value)) return;
 
     if (value === currentQuestion.answer) {
         handleCorrectAnswer();
+        answerInput.value = '';
     } else {
         handleWrongAnswer();
     }
+}
+
+function handleKeypadInteraction(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const { key, action } = target.dataset;
+    if (key) {
+        answerInput.value = `${answerInput.value || ''}${key}`;
+        answerInput.focus();
+        return;
+    }
+    if (action === 'clear') {
+        answerInput.value = '';
+    } else if (action === 'backspace') {
+        answerInput.value = answerInput.value.slice(0, -1);
+    } else if (action === 'submit') {
+        handleAnswerSubmit();
+    }
+    answerInput.focus();
+}
+
+answerForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    handleAnswerSubmit();
 });
 
 startButton?.addEventListener('click', () => {
@@ -307,3 +351,7 @@ restartButton?.addEventListener('click', () => {
     introPanel.classList.remove('hidden');
     resultPanel.classList.add('hidden');
 });
+
+keypad?.addEventListener('click', handleKeypadInteraction);
+
+applyDeviceUi();

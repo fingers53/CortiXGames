@@ -35,6 +35,11 @@
         </section>
 
         <section id="game-panel" class="panel hidden">
+            <div class="instructions" id="instructions-block">
+                <p>You have 90 seconds. Type the correct answer to each problem. A new problem appears only after you enter the correct answer.</p>
+                <p id="desktop-line" class="device-line">On desktop, use your keyboard and press Enter to submit.</p>
+                <p id="mobile-line" class="device-line hidden">On mobile, you can use the on-screen number pad or your device keyboard to answer.</p>
+            </div>
             <div class="hud">
                 <div><strong>Correct:</strong> <span id="correct-count">0</span></div>
                 <div><strong>Wrong attempts:</strong> <span id="wrong-count">0</span></div>
@@ -45,6 +50,31 @@
                     <input type="number" id="answer-input" autocomplete="off" inputmode="numeric" aria-label="Answer" required />
                     <button type="submit" class="primary">Submit</button>
                 </form>
+                <div id="keypad" class="keypad hidden" aria-label="On-screen number pad">
+                    <div class="key-row">
+                        <button type="button" data-key="7">7</button>
+                        <button type="button" data-key="8">8</button>
+                        <button type="button" data-key="9">9</button>
+                    </div>
+                    <div class="key-row">
+                        <button type="button" data-key="4">4</button>
+                        <button type="button" data-key="5">5</button>
+                        <button type="button" data-key="6">6</button>
+                    </div>
+                    <div class="key-row">
+                        <button type="button" data-key="1">1</button>
+                        <button type="button" data-key="2">2</button>
+                        <button type="button" data-key="3">3</button>
+                    </div>
+                    <div class="key-row">
+                        <button type="button" data-key="0">0</button>
+                        <button type="button" data-action="backspace">⌫</button>
+                        <button type="button" data-action="clear">Clear</button>
+                    </div>
+                    <div class="key-row">
+                        <button type="button" class="primary" data-action="submit">Enter</button>
+                    </div>
+                </div>
                 <div id="feedback" class="feedback" aria-live="polite"></div>
             </div>
         </section>

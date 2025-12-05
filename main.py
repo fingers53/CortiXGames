@@ -1565,7 +1565,12 @@ async def my_best_scores(username: str):
             cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
             row = cursor.fetchone()
             if not row:
-                return {"username": username, "reaction_best": None, "memory_best": None}
+                return {
+                    "username": username,
+                    "reaction_best": None,
+                    "memory_best": None,
+                    "arithmetic_best": None,
+                }
 
             user_id = row[0]
 
@@ -1581,10 +1586,24 @@ async def my_best_scores(username: str):
             )
             memory_best = cursor.fetchone()[0]
 
+            cursor.execute(
+                """
+                SELECT GREATEST(
+                    COALESCE((SELECT MAX(score) FROM yetamax_scores WHERE user_id = %s), 0),
+                    COALESCE((SELECT MAX(score) FROM maveric_scores WHERE user_id = %s), 0),
+                    COALESCE((SELECT MAX(score) FROM math_scores WHERE user_id = %s), 0),
+                    COALESCE((SELECT MAX(combined_score) FROM math_session_scores WHERE user_id = %s), 0)
+                )
+                """,
+                (user_id, user_id, user_id, user_id),
+            )
+            arithmetic_best = cursor.fetchone()[0]
+
         return {
             "username": username,
             "reaction_best": reaction_best,
             "memory_best": memory_best,
+            "arithmetic_best": arithmetic_best if arithmetic_best != 0 else None,
         }
     finally:
         conn.close()

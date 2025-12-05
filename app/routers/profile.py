@@ -4,6 +4,7 @@ from typing import Any
 
 import psycopg2.extras
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.achievements import get_all_achievements, get_user_achievements
@@ -153,8 +154,10 @@ async def profile_metrics_api(username: str, current_user=Depends(get_current_us
         conn.close()
 
     return JSONResponse(
-        content={
-            "metrics": metrics,
-            "achievements": {"earned": earned, "locked": locked},
-        }
+        content=jsonable_encoder(
+            {
+                "metrics": metrics,
+                "achievements": {"earned": earned, "locked": locked},
+            }
+        )
     )

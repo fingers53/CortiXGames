@@ -45,12 +45,6 @@ const midPanel = document.getElementById('midround-panel');
 const resultPanel = document.getElementById('result-panel');
 const roundIndicator = document.getElementById('round-indicator');
 
-const round1ScoreLine = document.getElementById('round1-score-line');
-const round1Correct = document.getElementById('round1-correct');
-const round1Wrong = document.getElementById('round1-wrong');
-const round1Avg = document.getElementById('round1-avg');
-const round1Min = document.getElementById('round1-min');
-const round1OperatorRows = document.getElementById('round1-operator-rows');
 const round2Countdown = document.getElementById('round2-countdown');
 
 const combinedScoreLine = document.getElementById('combined-score-line');
@@ -573,17 +567,9 @@ function endRound(endedByTimeout) {
 }
 
 function showRound1Summary(payload, response, score) {
-    const stats = roundStats[STATE.ROUND1];
     gamePanel.classList.add('hidden');
     midPanel.classList.remove('hidden');
     gameState = STATE.ROUND1_SUMMARY;
-
-    round1ScoreLine.textContent = `Round 1 score: ${score}${response && response.is_valid === false ? ' (flagged)' : ''}`;
-    round1Correct.textContent = payload.correct_count;
-    round1Wrong.textContent = payload.wrong_count;
-    round1Avg.textContent = `${payload.avg_time_ms.toFixed(1)} ms`;
-    round1Min.textContent = `${(payload.min_time_ms ?? 0).toFixed(1)} ms`;
-    buildOperatorBreakdown(round1OperatorRows, stats.typeStats);
 
     let countdown = 3;
     round2Countdown.textContent = `Starting Round 2 in ${countdown}...`;

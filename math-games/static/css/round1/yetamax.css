@@ -87,6 +87,9 @@ body {
 }
 
 .answer-form input {
+    appearance: textfield;
+    -moz-appearance: textfield;
+    -webkit-appearance: textfield;
     padding: 10px;
     font-size: 1.2rem;
     border-radius: 8px;
@@ -95,16 +98,6 @@ body {
     color: #b6f3c7;
     width: 180px;
     box-shadow: inset 0 0 12px rgba(13, 223, 107, 0.2);
-}
-
-.answer-form input[type="number"]::-webkit-outer-spin-button,
-.answer-form input[type="number"]::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-
-.answer-form input[type="number"] {
-    -moz-appearance: textfield;
 }
 
 .answer-form button.primary {

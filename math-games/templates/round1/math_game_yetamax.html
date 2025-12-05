@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>Yetamax Math Sprint</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/auth.css">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/math-games/static/css/round1/yetamax.css">
+</head>
+<body>
+    {% if current_user %}
+    <div class="auth-bar">
+        <span>Logged in as <strong>{{ current_user.username }}</strong></span>
+        <a href="/profile" class="auth-link">Profile</a>
+        <span class="auth-separator">|</span>
+        <a href="/logout" class="auth-link">Logout</a>
+    </div>
+    {% endif %}
+
+    <div class="yetamax-container">
+        <header class="yetamax-header">
+            <div>
+                <h1>Yetamax</h1>
+                <p class="subtitle">90 seconds of Zetamac-style arithmetic</p>
+                <p id="round-indicator" class="round-indicator">Round 1: Yetamax</p>
+            </div>
+            <div class="timer" id="timer-display">90.0s</div>
+        </header>
+
+        <section id="intro-panel" class="panel">
+            <div class="instructions">
+                <p>This game has <strong>two back-to-back 90 second rounds</strong> with a short breather in between:</p>
+                <ul>
+                    <li><strong>Round 1 — Yetamax:</strong> Classic two-digit addition and subtraction, plus multiplication and division using factors 2–12. A new problem appears only after you enter the correct answer.</li>
+                    <li><strong>Round 2 — Maveric:</strong> Harder mixed arithmetic with large integer add/sub, integer/decimal division, decimal multipliers, percent problems, and missing-value equations.</li>
+                </ul>
+                <p>Both rounds use a <strong>30 second shot clock per question</strong>. If the timer hits zero the question auto-skips, counts as a timeout, and you move on. After Round 1 there’s a brief break before Round 2 begins automatically.</p>
+            </div>
+            <button id="start-button" class="primary">Start the two-round sprint</button>
+        </section>
+
+        <section id="game-panel" class="panel hidden">
+            <div class="instructions" id="instructions-block">
+                <p>You have 90 seconds. Type the correct answer to each problem. A new problem appears only after you enter the correct answer.</p>
+                <p><strong>Maveric (Round 2) mixes tougher arithmetic:</strong> large integer addition/subtraction, integer and decimal division, decimal multipliers, percents, and missing-value equations.</p>
+                <p>Every question in both rounds has a 30 second cap—if time runs out it auto-skips, counts as a timeout, and moves you onward.</p>
+                <p id="desktop-line" class="device-line">On desktop, use your keyboard and press Enter to submit.</p>
+                <p id="mobile-line" class="device-line hidden">On mobile, you can use the on-screen number pad or your device keyboard to answer.</p>
+            </div>
+            <div class="hud">
+                <div><strong>Correct:</strong> <span id="correct-count">0</span></div>
+                <div><strong>Wrong attempts:</strong> <span id="wrong-count">0</span></div>
+                <div><strong>Timed out:</strong> <span id="timeout-count">0</span></div>
+            </div>
+            <div class="question-box">
+                <div id="question-text" class="question">Ready?</div>
+                <form id="answer-form" class="answer-form">
+                    <input type="text" id="answer-input" autocomplete="off" inputmode="numeric" aria-label="Answer" required />
+                    <button type="submit" class="primary submit-button" aria-label="Submit answer">
+                        Submit <span aria-hidden="true">↵</span>
+                    </button>
+                </form>
+                <div id="keypad" class="keypad hidden" aria-label="On-screen number pad">
+                    <div class="key-row">
+                        <button type="button" data-key="7">7</button>
+                        <button type="button" data-key="8">8</button>
+                        <button type="button" data-key="9">9</button>
+                    </div>
+                    <div class="key-row">
+                        <button type="button" data-key="4">4</button>
+                        <button type="button" data-key="5">5</button>
+                        <button type="button" data-key="6">6</button>
+                    </div>
+                    <div class="key-row">
+                        <button type="button" data-key="1">1</button>
+                        <button type="button" data-key="2">2</button>
+                        <button type="button" data-key="3">3</button>
+                    </div>
+                    <div class="key-row">
+                        <button type="button" data-key="0">0</button>
+                        <button type="button" data-action="backspace">⌫</button>
+                        <button type="button" data-action="clear">Clear</button>
+                    </div>
+                    <div class="key-row">
+                        <button type="button" class="primary" data-action="submit">Submit ↵</button>
+                    </div>
+                </div>
+                <div id="feedback" class="feedback" aria-live="polite"></div>
+            </div>
+        </section>
+
+        <section id="midround-panel" class="panel hidden">
+            <h2>Round 1 complete</h2>
+            <p class="score-line">Get ready for Maveric. Round 2 is about to begin.</p>
+            <div class="countdown" id="round2-countdown">Starting Round 2 in 6...</div>
+        </section>
+
+        <section id="result-panel" class="panel hidden">
+            <h2>Session complete</h2>
+            <p id="combined-score-line" class="score-line"></p>
+            <div class="result-grid">
+                <div><strong>Round 1 score:</strong> <span id="result-round1-score">0</span></div>
+                <div><strong>Round 2 score:</strong> <span id="result-round2-score">0</span></div>
+                <div><strong>Combined:</strong> <span id="result-combined-score">0</span></div>
+            </div>
+            <p class="muted">Scoring: (Correct × 10) − (Wrong × 2) + max(0, ⌊3000 ÷ avg time(ms)⌋)</p>
+            <div class="table-wrapper">
+                <table class="result-table" aria-label="Round results">
+                    <thead>
+                        <tr>
+                            <th>Round</th>
+                            <th>Correct</th>
+                            <th>Wrong</th>
+                            <th>Timed out</th>
+                            <th>Fastest (ms)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Round 1 — Yetamax</td>
+                            <td id="table-round1-correct">0</td>
+                            <td id="table-round1-wrong">0</td>
+                            <td id="table-round1-timeouts">0</td>
+                            <td id="table-round1-fastest">0</td>
+                        </tr>
+                        <tr>
+                            <td>Round 2 — Maveric</td>
+                            <td id="table-round2-correct">0</td>
+                            <td id="table-round2-wrong">0</td>
+                            <td id="table-round2-timeouts">0</td>
+                            <td id="table-round2-fastest">0</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="two-column">
+                <div id="operator-breakdown" class="panel breakdown">
+                    <h3>Round 1 by operator</h3>
+                    <table>
+                        <thead>
+                            <tr><th>Op</th><th>Count</th><th>Avg time (ms)</th></tr>
+                        </thead>
+                        <tbody id="operator-rows"></tbody>
+                    </table>
+                </div>
+                <div id="round2-breakdown" class="panel breakdown">
+                    <h3>Round 2 by type</h3>
+                    <table>
+                        <thead>
+                            <tr><th>Type</th><th>Count</th><th>Avg time (ms)</th></tr>
+                        </thead>
+                        <tbody id="round2-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="actions">
+                <button id="restart-button" class="primary">Play again</button>
+                <a class="link" href="/">Home</a>
+                <a class="link" href="/math-game/yetamax/leaderboard">Arithmetic Leaderboard</a>
+                <a class="link" href="/math-game/yetamax/stats">Stats</a>
+            </div>
+        </section>
+    </div>
+
+    <script src="/math-games/static/js/round2/maveric.js"></script>
+    <script src="/math-games/static/js/round1/yetamax.js"></script>
+</body>
+</html>

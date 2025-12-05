@@ -115,6 +115,56 @@
                     </div>
                 </div>
             </div>
+
+            <div class="insight-card">
+                <div class="insight-header">
+                    <div>
+                        <div class="muted">Arithmetic</div>
+                        <h3>Average time by type</h3>
+                    </div>
+                    <div class="score-pill">R1 best: {{ math_insights.round1.best_score or '—' }}</div>
+                </div>
+                <div class="insight-body">
+                    <p class="muted">Round 1 avg time: {{ math_insights.round1.overall_avg or '—' }}{% if math_insights.round1.overall_avg %} ms{% endif %}</p>
+                    <p class="muted">Round 2 best: {{ math_insights.round2.best_score or '—' }} | Avg time: {{ math_insights.round2.overall_avg or '—' }}{% if math_insights.round2.overall_avg %} ms{% endif %}</p>
+                    <div class="list-block">
+                        <div>
+                            <div class="muted">Round 1 types</div>
+                            <table class="attempt-table">
+                                <thead>
+                                    <tr><th>Type</th><th>Avg time (ms)</th></tr>
+                                </thead>
+                                <tbody>
+                                    {% if math_insights.round1.averages %}
+                                        {% for row in math_insights.round1.averages %}
+                                        <tr><td>{{ row.type }}</td><td>{{ row.avg_time_ms }}</td></tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr><td colspan="2">Play a round to unlock data.</td></tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <div class="muted">Round 2 types</div>
+                            <table class="attempt-table">
+                                <thead>
+                                    <tr><th>Type</th><th>Avg time (ms)</th></tr>
+                                </thead>
+                                <tbody>
+                                    {% if math_insights.round2.averages %}
+                                        {% for row in math_insights.round2.averages %}
+                                        <tr><td>{{ row.type }}</td><td>{{ row.avg_time_ms }}</td></tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr><td colspan="2">Complete Maveric to see timings.</td></tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         {% if attempts %}
@@ -130,7 +180,8 @@
                     <tbody>
                         {% for attempt in attempts %}
                             <tr>
-                                <td>{{ attempt.game | capitalize }}</td>
+                                {% set label = attempt.game.replace('_', ' ').title() %}
+                                <td>{{ label }}</td>
                                 <td>{{ attempt.score }}</td>
                                 <td>{{ attempt.created_at }}</td>
                             </tr>

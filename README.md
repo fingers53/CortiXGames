@@ -228,7 +228,7 @@ Rough plan:
 
 - New HTML: `templates/math_game.html`
 - New JS: `static/math_game.js`
-- New DB table: `math_scores`
+- New DB table: `yetamax_scores`
 - Shared username + leaderboard logic re-usable.
 
 ### 2. Improve memory game scoring

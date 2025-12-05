@@ -144,9 +144,16 @@ def ensure_maveric_scores_table():
                     total_questions INTEGER NOT NULL,
                     is_valid BOOLEAN NOT NULL DEFAULT TRUE,
                     raw_payload JSONB,
+                    round_index INTEGER,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
+                """
+            )
+            cursor.execute(
+                """
+                ALTER TABLE public.maveric_scores
+                    ADD COLUMN IF NOT EXISTS round_index INTEGER;
                 """
             )
             cursor.execute(
@@ -177,9 +184,16 @@ def ensure_math_session_scores_table():
                     user_id INTEGER NOT NULL REFERENCES users(id),
                     round1_score_id INTEGER NOT NULL REFERENCES yetamax_scores(id),
                     round2_score_id INTEGER NOT NULL REFERENCES maveric_scores(id),
+                    round3_score_id INTEGER REFERENCES maveric_scores(id),
                     combined_score INTEGER NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
+                """
+            )
+            cursor.execute(
+                """
+                ALTER TABLE public.math_session_scores
+                    ADD COLUMN IF NOT EXISTS round3_score_id INTEGER REFERENCES maveric_scores(id);
                 """
             )
             cursor.execute(
@@ -1322,9 +1336,10 @@ async def submit_yetamax_score(
     )
 
 
-@app.post("/api/math-game/yetamax/round2/submit")
-async def submit_maveric_score(
-    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+async def _submit_maveric_score(
+    request: Request,
+    current_user,
+    round_index: int,
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Login required")
@@ -1346,7 +1361,7 @@ async def submit_maveric_score(
     )
 
     raw_payload = data.copy()
-    raw_payload.update({"score": score_value, "is_valid": is_valid})
+    raw_payload.update({"score": score_value, "is_valid": is_valid, "round_index": round_index})
 
     conn = get_db_connection()
     try:
@@ -1355,8 +1370,8 @@ async def submit_maveric_score(
                 """
                 INSERT INTO maveric_scores (
                     user_id, score, correct_count, wrong_count,
-                    avg_time_ms, min_time_ms, total_questions, is_valid, raw_payload, updated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    avg_time_ms, min_time_ms, total_questions, is_valid, raw_payload, round_index, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 RETURNING id, created_at
                 """,
                 (
@@ -1369,6 +1384,7 @@ async def submit_maveric_score(
                     total_questions,
                     is_valid,
                     psycopg2.extras.Json(raw_payload),
+                    round_index,
                 ),
             )
             inserted = cursor.fetchone()
@@ -1376,7 +1392,7 @@ async def submit_maveric_score(
         check_and_award_achievements(
             conn,
             current_user["id"],
-            "math_round2",
+            "math_round2" if round_index == 2 else "math_round3",
             {
                 "avg_time_ms": avg_time_ms,
                 "wrong_count": wrong_count,
@@ -1388,15 +1404,30 @@ async def submit_maveric_score(
     finally:
         conn.close()
 
-    return JSONResponse(
-        content={
-            "status": "success",
-            "round2_score": score_value,
-            "is_valid": is_valid,
-            "maveric_score_id": new_id,
-            "per_question": per_question,
-        }
-    )
+    score_key = "round2_score" if round_index == 2 else "round3_score"
+    return {
+        "status": "success",
+        score_key: score_value,
+        "is_valid": is_valid,
+        "maveric_score_id": new_id,
+        "per_question": per_question,
+    }
+
+
+@app.post("/api/math-game/yetamax/round2/submit")
+async def submit_maveric_score(
+    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+):
+    response = await _submit_maveric_score(request, current_user, 2)
+    return JSONResponse(content=response)
+
+
+@app.post("/api/math-game/yetamax/round3/submit")
+async def submit_maveric_score_round3(
+    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+):
+    response = await _submit_maveric_score(request, current_user, 3)
+    return JSONResponse(content=response)
 
 
 @app.post("/api/math-game/yetamax/session/submit")
@@ -1409,6 +1440,7 @@ async def submit_math_session(
     data = await request.json()
     round1_score_id = int(data.get("round1_score_id") or 0)
     round2_score_id = int(data.get("round2_score_id") or 0)
+    round3_score_id = int(data.get("round3_score_id") or 0)
     combined_score = int(data.get("combined_score") or 0)
 
     if not (round1_score_id and round2_score_id):
@@ -1420,14 +1452,15 @@ async def submit_math_session(
             cursor.execute(
                 """
                 INSERT INTO math_session_scores (
-                    user_id, round1_score_id, round2_score_id, combined_score
-                ) VALUES (%s, %s, %s, %s)
+                    user_id, round1_score_id, round2_score_id, round3_score_id, combined_score
+                ) VALUES (%s, %s, %s, %s, %s)
                 RETURNING id, created_at
                 """,
                 (
                     current_user["id"],
                     round1_score_id,
                     round2_score_id,
+                    round3_score_id or None,
                     combined_score,
                 ),
             )
@@ -1486,7 +1519,14 @@ async def yetamax_leaderboard_api():
 
 
 @app.get("/api/math-game/maveric/leaderboard")
-async def maveric_leaderboard_api():
+async def maveric_leaderboard_api(request: Request):
+    round_index_param = request.query_params.get("round_index")
+    round_index = None
+    try:
+        round_index = int(round_index_param) if round_index_param else None
+    except ValueError:
+        round_index = None
+
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
@@ -1502,9 +1542,11 @@ async def maveric_leaderboard_api():
                 FROM maveric_scores s
                 JOIN users u ON u.id = s.user_id
                 WHERE s.is_valid = TRUE
+                  AND (%s IS NULL OR s.round_index = %s OR (s.round_index IS NULL AND %s = 2))
                 ORDER BY s.score DESC, s.created_at ASC
                 LIMIT 20
-                """
+                """,
+                (round_index, round_index, round_index),
             )
             rows = cursor.fetchall()
         scores = []

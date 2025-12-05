@@ -22,8 +22,8 @@
     <div class="yetamax-container">
         <header class="yetamax-header">
             <div>
-                <h1>Maveric</h1>
-                <p class="subtitle">Round 2 leaderboard (90s advanced mix)</p>
+                <h1>Round 2 Leaderboard</h1>
+                <p class="subtitle">90s advanced mix (decimals and missing percents)</p>
             </div>
             <div class="actions">
                 <a class="link" href="/math-game">Play</a>
@@ -33,7 +33,7 @@
 
         <section class="panel breakdown">
             <h2>Top 20 scores</h2>
-            <table class="leaderboard-table" aria-label="Top Maveric scores">
+            <table class="leaderboard-table" aria-label="Top Round 2 scores">
                 <thead>
                     <tr>
                         <th>Rank</th>
@@ -53,7 +53,7 @@
     <script>
         async function loadLeaderboard() {
             try {
-                const resp = await fetch('/api/math-game/maveric/leaderboard');
+                const resp = await fetch('/api/math-game/maveric/leaderboard?round_index=2');
                 const data = await resp.json();
                 const tbody = document.getElementById('leaderboard-rows');
                 tbody.innerHTML = '';

@@ -6,12 +6,15 @@ const STATE = {
     ROUND1: 'round1',
     ROUND1_SUMMARY: 'round1_summary',
     ROUND2: 'round2',
+    ROUND2_SUMMARY: 'round2_summary',
+    ROUND3: 'round3',
     FINISHED: 'finished',
 };
 
 const roundLabels = {
-    [STATE.ROUND1]: 'Round 1: Yetamax',
-    [STATE.ROUND2]: 'Round 2: Maveric',
+    [STATE.ROUND1]: 'Round 1',
+    [STATE.ROUND2]: 'Round 2',
+    [STATE.ROUND3]: 'Round 3',
 };
 
 let timerInterval = null;
@@ -28,10 +31,12 @@ let gameState = STATE.ROUND1;
 const roundStats = {
     [STATE.ROUND1]: createStats('round1'),
     [STATE.ROUND2]: createStats('round2'),
+    [STATE.ROUND3]: createStats('round3'),
 };
 
 let round1ServerResult = null;
 let round2ServerResult = null;
+let round3ServerResult = null;
 
 const questionText = document.getElementById('question-text');
 const answerInput = document.getElementById('answer-input');
@@ -48,11 +53,14 @@ const midPanel = document.getElementById('midround-panel');
 const resultPanel = document.getElementById('result-panel');
 const roundIndicator = document.getElementById('round-indicator');
 
-const round2Countdown = document.getElementById('round2-countdown');
+const midroundTitle = document.getElementById('midround-title');
+const midroundMessage = document.getElementById('midround-message');
+const roundCountdown = document.getElementById('round-countdown');
 
 const combinedScoreLine = document.getElementById('combined-score-line');
 const resultRound1Score = document.getElementById('result-round1-score');
 const resultRound2Score = document.getElementById('result-round2-score');
+const resultRound3Score = document.getElementById('result-round3-score');
 const resultCombinedScore = document.getElementById('result-combined-score');
 const tableRound1Correct = document.getElementById('table-round1-correct');
 const tableRound1Wrong = document.getElementById('table-round1-wrong');
@@ -62,8 +70,13 @@ const tableRound2Correct = document.getElementById('table-round2-correct');
 const tableRound2Wrong = document.getElementById('table-round2-wrong');
 const tableRound2Timeouts = document.getElementById('table-round2-timeouts');
 const tableRound2Fastest = document.getElementById('table-round2-fastest');
+const tableRound3Correct = document.getElementById('table-round3-correct');
+const tableRound3Wrong = document.getElementById('table-round3-wrong');
+const tableRound3Timeouts = document.getElementById('table-round3-timeouts');
+const tableRound3Fastest = document.getElementById('table-round3-fastest');
 const operatorRows = document.getElementById('operator-rows');
 const round2Rows = document.getElementById('round2-rows');
+const round3Rows = document.getElementById('round3-rows');
 
 const restartButton = document.getElementById('restart-button');
 const startButton = document.getElementById('start-button');
@@ -103,8 +116,10 @@ function resetAll() {
     wrongAttemptsForCurrent = 0;
     round1ServerResult = null;
     round2ServerResult = null;
+    round3ServerResult = null;
     resetRoundStats(STATE.ROUND1);
     resetRoundStats(STATE.ROUND2);
+    resetRoundStats(STATE.ROUND3);
     updateHud(roundStats[STATE.ROUND1]);
     timerDisplay.textContent = `${(GAME_DURATION_MS / 1000).toFixed(1)}s`;
     feedbackEl.textContent = '';
@@ -123,18 +138,18 @@ function updateRoundIndicator(roundKey) {
 function updateHud(stats) {
     correctCountEl.textContent = stats.correctCount;
     wrongCountEl.textContent = stats.wrongCount;
-    timeoutCountEl.textContent = stats.timedOutCount || 0;
+    timeoutCountEl.textContent = stats.timedOutCount;
 }
 
 function applyDeviceUi() {
     if (isMobile) {
         keypad?.classList.remove('hidden');
-        mobileLine?.classList.remove('hidden');
         desktopLine?.classList.add('hidden');
+        mobileLine?.classList.remove('hidden');
     } else {
         keypad?.classList.add('hidden');
-        mobileLine?.classList.add('hidden');
         desktopLine?.classList.remove('hidden');
+        mobileLine?.classList.add('hidden');
     }
 }
 
@@ -162,7 +177,6 @@ function randomIntExcluding(min, max, excludedSet) {
             safety += 1;
         } while (excludedSet.has(value) && safety < 25);
         if (!excludedSet.has(value)) return value;
-        // fallback if the range is too tight
     }
     return randomInt(min, max);
 }
@@ -171,6 +185,21 @@ function randomDigitInt(digits) {
     const low = 10 ** (digits - 1);
     const high = 10 ** digits - 1;
     return randomInt(low, high);
+}
+
+function isTrivialArithmetic(operator, a, b, answer) {
+    if (operator === '+' || operator === '-') {
+        if (a === 0 || b === 0) return true;
+        if (Math.abs(answer) <= 3) return true;
+    }
+    if (operator === '*' || operator === '×') {
+        if (a === 1 || b === 1) return true;
+    }
+    if (operator === '/') {
+        if (b === 1) return true;
+        if (a === b) return true;
+    }
+    return false;
 }
 
 function generateRound1Question() {
@@ -191,31 +220,36 @@ function generateRound1Question() {
     let a = 0;
     let b = 0;
     let answer = 0;
+    let attempts = 0;
 
-    if (operator === '+') {
-        a = randomInt(Math.max(addMin, 13), addMax);
-        b = randomInt(addMin, addMax);
-        answer = a + b;
-    } else if (operator === '-') {
-        a = randomInt(Math.max(addMin, 22), addMax);
-        const maxB = Math.max(2, a - 11);
-        b = randomInt(2, maxB);
-        answer = a - b;
-        if (answer < 11) {
-            // guard against edge cases when ranges tighten
-            return generateRound1Question();
+    while (attempts < 50) {
+        attempts += 1;
+        if (operator === '+') {
+            a = randomInt(Math.max(addMin, 13), addMax);
+            b = randomInt(addMin, addMax);
+            answer = a + b;
+        } else if (operator === '-') {
+            a = randomInt(Math.max(addMin, 22), addMax);
+            const maxB = Math.max(2, a - 11);
+            b = randomInt(2, maxB);
+            answer = a - b;
+            if (answer < 11) continue;
+        } else if (operator === '*') {
+            const excluded = new Set([10, 1]);
+            a = randomIntExcluding(2, 12, excluded);
+            b = randomIntExcluding(mulBMin, 100, excluded);
+            answer = a * b;
+        } else {
+            const excluded = new Set([10, 1]);
+            b = randomIntExcluding(2, 12, excluded);
+            let multiplier = randomIntExcluding(mulBMin, 100, excluded);
+            answer = multiplier;
+            a = b * multiplier;
         }
-    } else if (operator === '*') {
-        const excluded = new Set([10]);
-        a = randomIntExcluding(2, 12, excluded);
-        b = randomIntExcluding(mulBMin, 100, excluded);
-        answer = a * b;
-    } else {
-        const excluded = new Set([10]);
-        b = randomIntExcluding(2, 12, excluded);
-        let multiplier = randomIntExcluding(mulBMin, 100, excluded);
-        answer = multiplier;
-        a = b * multiplier;
+
+        if (!isTrivialArithmetic(operator, a, b, answer)) {
+            break;
+        }
     }
 
     const expression = `${a} ${operator} ${b}`;
@@ -223,10 +257,18 @@ function generateRound1Question() {
 }
 
 function generateRound2Question() {
-    if (window.MavericRound?.generateQuestion) {
-        return window.MavericRound.generateQuestion();
+    if (window.AdvancedRounds?.generateRound2Question) {
+        return window.AdvancedRounds.generateRound2Question();
     }
-    console.warn('Maveric round generator missing; falling back to Round 1 logic');
+    console.warn('Advanced round generator missing; falling back to Round 1 logic');
+    return generateRound1Question();
+}
+
+function generateRound3Question() {
+    if (window.AdvancedRounds?.generateRound3Question) {
+        return window.AdvancedRounds.generateRound3Question();
+    }
+    console.warn('Advanced round generator missing; falling back to Round 1 logic');
     return generateRound1Question();
 }
 
@@ -242,6 +284,12 @@ function startQuestionTimer() {
     questionTimeout = setTimeout(() => {
         handleQuestionTimeout();
     }, QUESTION_TIME_LIMIT_MS);
+}
+
+function selectQuestion(roundKey) {
+    if (roundKey === STATE.ROUND1) return generateRound1Question();
+    if (roundKey === STATE.ROUND2) return generateRound2Question();
+    return generateRound3Question();
 }
 
 function showQuestion(question) {
@@ -274,7 +322,6 @@ function startRound(roundKey) {
     wrongAttemptsForCurrent = 0;
     gameState = roundKey;
     gameActive = true;
-    const stats = roundStats[roundKey];
     resetRoundStats(roundKey);
     updateRoundIndicator(roundKey);
     updateHud(roundStats[roundKey]);
@@ -286,7 +333,7 @@ function startRound(roundKey) {
     answerInput.disabled = false;
     timerDisplay.textContent = `${(GAME_DURATION_MS / 1000).toFixed(1)}s`;
     startTimer();
-    const question = roundKey === STATE.ROUND1 ? generateRound1Question() : generateRound2Question();
+    const question = selectQuestion(roundKey);
     showQuestion(question);
 }
 
@@ -298,7 +345,6 @@ function handleWrongAnswer() {
     feedbackEl.textContent = 'Try again';
     answerInput.value = '';
     answerInput.classList.remove('shake');
-    // force reflow so animation can replay
     void answerInput.offsetWidth;
     answerInput.classList.add('input-error', 'shake');
 }
@@ -324,7 +370,7 @@ function handleQuestionTimeout() {
     });
 
     updateHud(stats);
-    const nextQuestion = gameState === STATE.ROUND1 ? generateRound1Question() : generateRound2Question();
+    const nextQuestion = selectQuestion(gameState);
     showQuestion(nextQuestion);
 }
 
@@ -356,7 +402,7 @@ function handleCorrectAnswer() {
     stats.typeStats[key].totalTime += timeMs;
 
     updateHud(stats);
-    const nextQuestion = gameState === STATE.ROUND1 ? generateRound1Question() : generateRound2Question();
+    const nextQuestion = selectQuestion(gameState);
     showQuestion(nextQuestion);
 }
 
@@ -382,17 +428,10 @@ function buildOperatorBreakdown(targetEl, statsMap) {
         targetEl.innerHTML = '<tr><td colspan="3">All questions skipped or timed out.</td></tr>';
         return;
     }
-    entries.forEach(([op, info]) => {
-        const count = info.count ?? 0;
-        const totalTime = info.totalTime ?? (info.avg_time_ms != null ? info.avg_time_ms * count : 0);
-        const avg = count > 0 ? totalTime / count : 0;
-        const avgSeconds = Number.isFinite(avg) ? avg / 1000 : null;
+    entries.forEach(([key, val]) => {
+        const avgTime = val.count > 0 ? val.totalTime / val.count : 0;
         const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${op}</td>
-            <td>${count}</td>
-            <td>${avgSeconds != null ? avgSeconds.toFixed(2) : '—'}</td>
-        `;
+        row.innerHTML = `<td>${key}</td><td>${val.count}</td><td>${(avgTime / 1000).toFixed(2)}</td>`;
         targetEl.appendChild(row);
     });
 }
@@ -433,7 +472,25 @@ async function submitRound2Results(payload) {
     }
 }
 
-async function submitSessionLink(round1Id, round2Id, combinedScore) {
+async function submitRound3Results(payload) {
+    try {
+        const resp = await fetch('/api/math-game/yetamax/round3/submit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken,
+            },
+            body: JSON.stringify(payload),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return await resp.json();
+    } catch (err) {
+        console.error('Failed to submit round 3', err);
+        return null;
+    }
+}
+
+async function submitSessionLink(round1Id, round2Id, round3Id, combinedScore) {
     try {
         const resp = await fetch('/api/math-game/yetamax/session/submit', {
             method: 'POST',
@@ -444,6 +501,7 @@ async function submitSessionLink(round1Id, round2Id, combinedScore) {
             body: JSON.stringify({
                 round1_score_id: round1Id,
                 round2_score_id: round2Id,
+                round3_score_id: round3Id,
                 combined_score: combinedScore,
             }),
         });
@@ -495,7 +553,7 @@ function endRound(endedByTimeout) {
         submitRound1Results(payload).then((resp) => {
             const score = resp?.score ?? calculateLocalScore(stats);
             round1ServerResult = { ...payload, score, is_valid: resp?.is_valid, id: resp?.yetamax_score_id };
-            showRound1Summary(payload, resp, score);
+            showIntermission('Round 1 complete', 'Round 2 is harder with decimals and missing percents. Shot clock still applies.', STATE.ROUND2);
         });
     } else if (gameState === STATE.ROUND2) {
         const typeBreakdown = {};
@@ -524,39 +582,72 @@ function endRound(endedByTimeout) {
         submitRound2Results(payload).then((resp) => {
             const score = resp?.round2_score ?? calculateLocalScore(stats);
             round2ServerResult = { ...payload, score, is_valid: resp?.is_valid, id: resp?.maveric_score_id };
-            const combined = (round1ServerResult?.score || 0) + score;
-            if (round1ServerResult?.id && resp?.maveric_score_id) {
-                submitSessionLink(round1ServerResult.id, resp.maveric_score_id, combined);
+            showIntermission('Round 2 complete', 'Round 3 eases up slightly but keeps multi-step reasoning.', STATE.ROUND3);
+        });
+    } else if (gameState === STATE.ROUND3) {
+        const typeBreakdown = {};
+        Object.entries(stats.typeStats).forEach(([key, val]) => {
+            if (val.count > 0) {
+                typeBreakdown[key] = {
+                    count: val.count,
+                    avg_time_ms: val.totalTime / val.count,
+                };
             }
-            showFinalResults(score, combined, typeBreakdown);
+        });
+
+        const payload = {
+            correct_count: stats.correctCount,
+            wrong_count: stats.wrongCount,
+            avg_time_ms: avgTimeMs,
+            min_time_ms: stats.minTimeMs ?? 0,
+            total_questions: stats.perQuestions.length,
+            per_question: stats.perQuestions,
+            ended_by_timeout: endedByTimeout,
+            type_breakdown: typeBreakdown,
+            score_client: calculateLocalScore(stats),
+            timed_out_count: stats.timedOutCount,
+        };
+
+        submitRound3Results(payload).then((resp) => {
+            const score = resp?.round3_score ?? calculateLocalScore(stats);
+            round3ServerResult = { ...payload, score, is_valid: resp?.is_valid, id: resp?.maveric_score_id };
+            const combined = (round1ServerResult?.score || 0) + (round2ServerResult?.score || 0) + score;
+            if (round1ServerResult?.id && round2ServerResult?.id && resp?.maveric_score_id) {
+                submitSessionLink(round1ServerResult.id, round2ServerResult.id, resp.maveric_score_id, combined);
+            }
+            showFinalResults(score, combined, round2ServerResult?.type_breakdown || {}, typeBreakdown);
         });
     }
 }
 
-function showRound1Summary(payload, response, score) {
+function showIntermission(title, message, nextRound) {
     gamePanel.classList.add('hidden');
     midPanel.classList.remove('hidden');
-    gameState = STATE.ROUND1_SUMMARY;
+    gameState = nextRound === STATE.ROUND2 ? STATE.ROUND1_SUMMARY : STATE.ROUND2_SUMMARY;
+
+    midroundTitle.textContent = title;
+    midroundMessage.textContent = message;
 
     let countdown = 6;
-    round2Countdown.textContent = `Starting Round 2 in ${countdown}...`;
-    const startRound2 = () => {
+    roundCountdown.textContent = `Starting ${roundLabels[nextRound]} in ${countdown}...`;
+    const startNextRound = () => {
         clearInterval(breakInterval);
-        startRound(STATE.ROUND2);
+        startRound(nextRound);
     };
     breakInterval = setInterval(() => {
         countdown -= 1;
         if (countdown <= 0) {
-            startRound2();
+            startNextRound();
         } else {
-            round2Countdown.textContent = `Starting Round 2 in ${countdown}...`;
+            roundCountdown.textContent = `Starting ${roundLabels[nextRound]} in ${countdown}...`;
         }
     }, 1000);
-    setTimeout(startRound2, countdown * 1000 + 200);
+    setTimeout(startNextRound, countdown * 1000 + 200);
 }
 
-function showFinalResults(round2Score, combinedScore, typeBreakdown) {
+function showFinalResults(round3Score, combinedScore, round2Breakdown, round3Breakdown) {
     const round1Score = round1ServerResult?.score ?? calculateLocalScore(roundStats[STATE.ROUND1]);
+    const round2Score = round2ServerResult?.score ?? calculateLocalScore(roundStats[STATE.ROUND2]);
     gamePanel.classList.add('hidden');
     midPanel.classList.add('hidden');
     resultPanel.classList.remove('hidden');
@@ -565,6 +656,7 @@ function showFinalResults(round2Score, combinedScore, typeBreakdown) {
     combinedScoreLine.textContent = `Combined score: ${combinedScore}`;
     resultRound1Score.textContent = round1Score;
     resultRound2Score.textContent = round2Score;
+    resultRound3Score.textContent = round3Score;
     resultCombinedScore.textContent = combinedScore;
 
     tableRound1Correct.textContent = roundStats[STATE.ROUND1].correctCount;
@@ -577,8 +669,14 @@ function showFinalResults(round2Score, combinedScore, typeBreakdown) {
     tableRound2Timeouts.textContent = roundStats[STATE.ROUND2].timedOutCount;
     tableRound2Fastest.textContent = formatFastest(roundStats[STATE.ROUND2].minTimeMs);
 
-            buildOperatorBreakdown(operatorRows, roundStats[STATE.ROUND1].typeStats);
-            buildOperatorBreakdown(round2Rows, typeBreakdown);
+    tableRound3Correct.textContent = roundStats[STATE.ROUND3].correctCount;
+    tableRound3Wrong.textContent = roundStats[STATE.ROUND3].wrongCount;
+    tableRound3Timeouts.textContent = roundStats[STATE.ROUND3].timedOutCount;
+    tableRound3Fastest.textContent = formatFastest(roundStats[STATE.ROUND3].minTimeMs);
+
+    buildOperatorBreakdown(operatorRows, roundStats[STATE.ROUND1].typeStats);
+    buildOperatorBreakdown(round2Rows, round2Breakdown);
+    buildOperatorBreakdown(round3Rows, round3Breakdown);
 }
 
 function formatFastest(value) {

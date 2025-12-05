@@ -23,30 +23,31 @@
     <div class="yetamax-container">
         <header class="yetamax-header">
             <div>
-                <h1>Yetamax</h1>
-                <p class="subtitle">90 seconds of Zetamac-style arithmetic</p>
-                <p id="round-indicator" class="round-indicator">Round 1: Yetamax</p>
+                <h1>Math Game</h1>
+                <p class="subtitle">Three back-to-back 90 second rounds</p>
+                <p id="round-indicator" class="round-indicator">Round 1</p>
             </div>
             <div class="timer" id="timer-display">90.0s</div>
         </header>
 
         <section id="intro-panel" class="panel">
             <div class="instructions">
-                <p>This game has <strong>two back-to-back 90 second rounds</strong> with a short breather in between:</p>
+                <p>This game has <strong>three back-to-back 90 second rounds</strong> with short breathers in between:</p>
                 <ul>
-                    <li><strong>Round 1 — Yetamax:</strong> Two-digit addition and subtraction, plus multiplication and division by factors 2–12. No new problem appears until you answer correctly.</li>
-                    <li><strong>Round 2 — Maveric:</strong> Harder mixes with larger integer add/sub, clean integer division and multipliers (no messy decimals), percent-of and percent-increase prompts, and missing-value equations.</li>
+                    <li><strong>Round 1:</strong> Two-digit addition and subtraction, plus multiplication and division by factors 2–12. No new problem appears until you answer correctly.</li>
+                    <li><strong>Round 2:</strong> Harder mixes with decimals and missing percents.</li>
+                    <li><strong>Round 3:</strong> Multi-step reasoning with missing equations, percents, and tougher multipliers.</li>
                 </ul>
-                <p>Every question has a <strong>30 second shot clock</strong>. If the timer hits zero the question auto-skips, counts as a timeout, and you move on. After Round 1 there’s a short break before Round 2 begins automatically.</p>
+                <p>Every question has a <strong>30 second shot clock</strong>. If the timer hits zero the question auto-skips, counts as a timeout, and you move on. Each round starts automatically after a brief countdown.</p>
             </div>
-            <button id="start-button" class="primary">Start the two-round sprint</button>
+            <button id="start-button" class="primary">Start Round 1</button>
         </section>
 
         <section id="game-panel" class="panel hidden">
             <div class="instructions" id="instructions-block">
                 <p>You have 90 seconds. Type the correct answer to each problem. A new problem appears only after you enter the correct answer.</p>
-                <p><strong>Maveric (Round 2) mixes tougher arithmetic:</strong> larger integer addition/subtraction, clean integer division and multipliers (no messy decimals), percent problems, and missing-value equations.</p>
-                <p>Every question in both rounds has a 30 second cap—if time runs out it auto-skips, counts as a timeout, and moves you onward.</p>
+                <p><strong>Round 2</strong> mixes tougher decimal work and missing-percent prompts. <strong>Round 3</strong> shifts to multi-step reasoning with percent changes, missing equations, and larger multipliers.</p>
+                <p>Every question has a 30 second cap—if time runs out it auto-skips, counts as a timeout, and moves you onward.</p>
                 <p id="desktop-line" class="device-line">On desktop, use your keyboard and press Enter to submit.</p>
                 <p id="mobile-line" class="device-line hidden">On mobile, you can use the on-screen number pad or your device keyboard to answer.</p>
             </div>
@@ -93,9 +94,9 @@
         </section>
 
         <section id="midround-panel" class="panel hidden">
-            <h2>Round 1 complete</h2>
-            <p class="score-line">Get ready for Maveric—questions get harder and switch formats. The 30s shot clock still applies.</p>
-            <div class="countdown" id="round2-countdown">Starting Round 2 in 6...</div>
+            <h2 id="midround-title">Round complete</h2>
+            <p id="midround-message" class="score-line"></p>
+            <div class="countdown" id="round-countdown">Starting next round in 6...</div>
         </section>
 
         <section id="result-panel" class="panel hidden">
@@ -104,6 +105,7 @@
             <div class="result-grid">
                 <div><strong>Round 1 score:</strong> <span id="result-round1-score">0</span></div>
                 <div><strong>Round 2 score:</strong> <span id="result-round2-score">0</span></div>
+                <div><strong>Round 3 score:</strong> <span id="result-round3-score">0</span></div>
                 <div><strong>Combined:</strong> <span id="result-combined-score">0</span></div>
             </div>
             <p class="muted">Scoring: (Correct × 10) − (Wrong × 2) + max(0, ⌊3000 ÷ avg time(ms)⌋)</p>
@@ -120,18 +122,25 @@
                     </thead>
                     <tbody>
                         <tr>
-                            <td>Round 1 — Yetamax</td>
+                            <td>Round 1</td>
                             <td id="table-round1-correct">0</td>
                             <td id="table-round1-wrong">0</td>
                             <td id="table-round1-timeouts">0</td>
                             <td id="table-round1-fastest">0</td>
                         </tr>
                         <tr>
-                            <td>Round 2 — Maveric</td>
+                            <td>Round 2</td>
                             <td id="table-round2-correct">0</td>
                             <td id="table-round2-wrong">0</td>
                             <td id="table-round2-timeouts">0</td>
                             <td id="table-round2-fastest">0</td>
+                        </tr>
+                        <tr>
+                            <td>Round 3</td>
+                            <td id="table-round3-correct">0</td>
+                            <td id="table-round3-wrong">0</td>
+                            <td id="table-round3-timeouts">0</td>
+                            <td id="table-round3-fastest">0</td>
                         </tr>
                     </tbody>
                 </table>
@@ -153,6 +162,15 @@
                             <tr><th>Type</th><th>Count</th><th>Avg time (s)</th></tr>
                         </thead>
                         <tbody id="round2-rows"></tbody>
+                    </table>
+                </div>
+                <div id="round3-breakdown" class="panel breakdown">
+                    <h3>Round 3 by type</h3>
+                    <table>
+                        <thead>
+                            <tr><th>Type</th><th>Count</th><th>Avg time (s)</th></tr>
+                        </thead>
+                        <tbody id="round3-rows"></tbody>
                     </table>
                 </div>
             </div>

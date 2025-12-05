@@ -87,9 +87,16 @@ def ensure_maveric_scores_table():
                     total_questions INTEGER NOT NULL,
                     is_valid BOOLEAN NOT NULL DEFAULT TRUE,
                     raw_payload JSONB,
+                    round_index INTEGER,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
+                """
+            )
+            cursor.execute(
+                """
+                ALTER TABLE public.maveric_scores
+                    ADD COLUMN IF NOT EXISTS round_index INTEGER;
                 """
             )
             cursor.execute(
@@ -120,9 +127,16 @@ def ensure_math_session_scores_table():
                     user_id INTEGER NOT NULL REFERENCES users(id),
                     round1_score_id INTEGER NOT NULL REFERENCES yetamax_scores(id),
                     round2_score_id INTEGER NOT NULL REFERENCES maveric_scores(id),
+                    round3_score_id INTEGER REFERENCES maveric_scores(id),
                     combined_score INTEGER NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
+                """
+            )
+            cursor.execute(
+                """
+                ALTER TABLE public.math_session_scores
+                    ADD COLUMN IF NOT EXISTS round3_score_id INTEGER REFERENCES maveric_scores(id);
                 """
             )
             cursor.execute(

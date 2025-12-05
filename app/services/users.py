@@ -75,11 +75,15 @@ def fetch_recent_attempts(conn, user_id: int) -> list[dict]:
             UNION ALL
             SELECT 'arithmetic_r2' AS game, score AS score, created_at
             FROM maveric_scores
-            WHERE user_id = %s
+            WHERE user_id = %s AND (round_index = 2 OR round_index IS NULL)
+            UNION ALL
+            SELECT 'arithmetic_r3' AS game, score AS score, created_at
+            FROM maveric_scores
+            WHERE user_id = %s AND round_index = 3
             ORDER BY created_at DESC
             LIMIT 20
             """,
-            (user_id, user_id, user_id, user_id),
+            (user_id, user_id, user_id, user_id, user_id),
         )
         rows = cursor.fetchall() or []
         return [dict(r) for r in rows]

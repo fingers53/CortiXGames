@@ -197,7 +197,7 @@ def check_and_award_achievements(conn, user_id: int, game_type: str, score_row: 
             if score_row.get("running_total") and score_row.get("running_total") >= 1000:
                 _award(cursor, user_id, "MEMORY_1K_TOTAL", achievement_map)
 
-        if game_type in {"math_round1", "math_round2", "math"}:
+        if game_type in {"math_round1", "math_round2", "math_round3", "math"}:
             avg_time_ms = score_row.get("avg_time_ms")
             wrong_count = score_row.get("wrong_count") or 0
             correct_count = score_row.get("correct_count") or 0

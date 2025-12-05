@@ -110,6 +110,16 @@ def get_math_metrics(conn, user_id: int) -> dict:
             (user_id,),
         )
         maveric_best = (_fetchone(cursor) or {}).get("best")
+        cursor.execute(
+            "SELECT MAX(score) AS best FROM maveric_scores WHERE user_id = %s AND (round_index = 2 OR round_index IS NULL)",
+            (user_id,),
+        )
+        maveric_round2_best = (_fetchone(cursor) or {}).get("best")
+        cursor.execute(
+            "SELECT MAX(score) AS best FROM maveric_scores WHERE user_id = %s AND round_index = 3",
+            (user_id,),
+        )
+        maveric_round3_best = (_fetchone(cursor) or {}).get("best")
         maveric_accuracy, maveric_rows = _math_accuracy(cursor, "maveric_scores", user_id)
         cursor.execute(
             "SELECT AVG(avg_time_ms) AS avg_time_ms FROM maveric_scores WHERE user_id = %s",
@@ -144,6 +154,8 @@ def get_math_metrics(conn, user_id: int) -> dict:
         "yetamax_accuracy": yetamax_accuracy,
         "yetamax_qpm": yetamax_qpm,
         "maveric_best": maveric_best,
+        "maveric_round2_best": maveric_round2_best,
+        "maveric_round3_best": maveric_round3_best,
         "maveric_accuracy": maveric_accuracy,
         "maveric_qpm": maveric_qpm,
         "total_questions": total_questions,

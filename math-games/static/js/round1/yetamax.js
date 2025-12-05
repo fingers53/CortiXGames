@@ -251,6 +251,7 @@ function showQuestion(question) {
     questionText.textContent = question.expression;
     feedbackEl.textContent = '';
     answerInput.value = '';
+    answerInput.classList.remove('input-error', 'shake');
     answerInput.focus();
     startQuestionTimer();
 }
@@ -295,6 +296,11 @@ function handleWrongAnswer() {
     wrongAttemptsForCurrent += 1;
     updateHud(stats);
     feedbackEl.textContent = 'Try again';
+    answerInput.value = '';
+    answerInput.classList.remove('shake');
+    // force reflow so animation can replay
+    void answerInput.offsetWidth;
+    answerInput.classList.add('input-error', 'shake');
 }
 
 function handleQuestionTimeout() {

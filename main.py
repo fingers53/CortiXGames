@@ -1085,10 +1085,10 @@ async def submit_memory_score(
             raise HTTPException(status_code=422, detail="Clicks must be objects")
 
     score_result = compute_memory_scores(question_log)
-    total_score = score_result["total"]
-    r1 = score_result["round1"]
-    r2 = score_result["round2"]
-    r3 = score_result["round3"]
+    total_score = max(0, score_result["total"])
+    r1 = max(0, score_result["round1"])
+    r2 = max(0, score_result["round2"])
+    r3 = max(0, score_result["round3"])
     country_code = country_input or get_country_code_from_ip(request.client.host)
 
     enforce_range(total_score, 0, 200000, "Total score")

@@ -156,6 +156,22 @@ def ensure_user_profile_columns():
         conn.close()
 
 
+def ensure_memory_score_payload_column():
+    """Add a payload column to memory_scores to capture richer analytics."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                ALTER TABLE public.memory_scores
+                    ADD COLUMN IF NOT EXISTS raw_payload jsonb;
+                """
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def ensure_achievements_tables():
     """Create achievements tables if they do not exist."""
     conn = get_db_connection()

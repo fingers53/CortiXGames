@@ -7,6 +7,7 @@ from .db import (
     ensure_achievements_tables,
     ensure_math_session_scores_table,
     ensure_maveric_scores_table,
+    ensure_memory_score_payload_column,
     ensure_user_profile_columns,
     ensure_yetamax_scores_table,
 )
@@ -23,6 +24,7 @@ def create_app() -> FastAPI:
     ensure_yetamax_scores_table()
     ensure_maveric_scores_table()
     ensure_math_session_scores_table()
+    ensure_memory_score_payload_column()
     ensure_achievements_tables()
     seed_achievements()
 

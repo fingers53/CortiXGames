@@ -52,6 +52,7 @@ def get_db_connection():
 
 def ensure_yetamax_scores_table():
     conn = get_db_connection()
+    new_id = None
     try:
         with conn.cursor() as cursor:
             cursor.execute(
@@ -116,6 +117,77 @@ def ensure_yetamax_scores_table():
 
 # Ensure Yetamax storage exists on startup
 ensure_yetamax_scores_table()
+
+
+def ensure_maveric_scores_table():
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS maveric_scores (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    score INTEGER NOT NULL,
+                    correct_count INTEGER NOT NULL,
+                    wrong_count INTEGER NOT NULL,
+                    avg_time_ms DOUBLE PRECISION NOT NULL,
+                    min_time_ms DOUBLE PRECISION NOT NULL,
+                    total_questions INTEGER NOT NULL,
+                    is_valid BOOLEAN NOT NULL DEFAULT TRUE,
+                    raw_payload JSONB,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_maveric_scores_score_created_at
+                ON maveric_scores (score DESC, created_at ASC)
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_maveric_scores_user_recent
+                ON maveric_scores (user_id, created_at DESC)
+                """
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def ensure_math_session_scores_table():
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS math_session_scores (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    round1_score_id INTEGER NOT NULL REFERENCES yetamax_scores(id),
+                    round2_score_id INTEGER NOT NULL REFERENCES maveric_scores(id),
+                    combined_score INTEGER NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_math_sessions_user_recent
+                ON math_session_scores (user_id, created_at DESC)
+                """
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# Ensure Round 2 and combined storage exist on startup
+ensure_maveric_scores_table()
+ensure_math_session_scores_table()
 
 
 def read_html(file_name: str) -> str:
@@ -993,6 +1065,19 @@ async def yetamax_leaderboard_page(
     )
 
 
+@app.get("/math-game/maveric/leaderboard", response_class=HTMLResponse)
+async def maveric_leaderboard_page(
+    request: Request, current_user=Depends(get_current_user)
+):
+    return render_template(
+        "maveric_leaderboard.html",
+        request,
+        {
+            "current_user": current_user,
+        },
+    )
+
+
 @app.get("/math-game/yetamax/stats", response_class=HTMLResponse)
 async def yetamax_stats_page(request: Request, current_user=Depends(get_current_user)):
     return render_template(
@@ -1037,6 +1122,7 @@ async def submit_yetamax_score(
                     user_id, score, correct_count, wrong_count,
                     avg_time_ms, min_time_ms, is_valid, raw_payload
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
                 """,
                 (
                     current_user["id"],
@@ -1049,6 +1135,7 @@ async def submit_yetamax_score(
                     psycopg2.extras.Json(raw_payload),
                 ),
             )
+            new_id = cursor.fetchone()[0]
         conn.commit()
     finally:
         conn.close()
@@ -1062,10 +1149,114 @@ async def submit_yetamax_score(
             "avg_time_ms": avg_time_ms,
             "min_time_ms": min_time_ms,
             "is_valid": is_valid,
+            "yetamax_score_id": new_id,
             "avg_time_by_operator": avg_time_by_operator,
             "per_question_times": per_question_times,
         }
     )
+
+
+@app.post("/api/math-game/yetamax/round2/submit")
+async def submit_maveric_score(
+    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Login required")
+
+    data = await request.json()
+    correct_count = int(data.get("correct_count") or 0)
+    wrong_count = int(data.get("wrong_count") or 0)
+    avg_time_ms = float(data.get("avg_time_ms") or 0)
+    min_time_ms = float(data.get("min_time_ms") or 0)
+    total_questions = int(data.get("total_questions") or 0)
+    per_question = data.get("per_question") or []
+
+    if correct_count < 0 or wrong_count < 0:
+        raise HTTPException(status_code=422, detail="Counts must be non-negative")
+
+    is_valid = not (min_time_ms < 150)
+    score_value = calculate_yetamax_score(correct_count, wrong_count, avg_time_ms)
+
+    raw_payload = data.copy()
+    raw_payload.update({"score": score_value, "is_valid": is_valid})
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO maveric_scores (
+                    user_id, score, correct_count, wrong_count,
+                    avg_time_ms, min_time_ms, total_questions, is_valid, raw_payload, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                RETURNING id
+                """,
+                (
+                    current_user["id"],
+                    score_value,
+                    correct_count,
+                    wrong_count,
+                    avg_time_ms,
+                    min_time_ms,
+                    total_questions,
+                    is_valid,
+                    psycopg2.extras.Json(raw_payload),
+                ),
+            )
+            new_id = cursor.fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+
+    return JSONResponse(
+        content={
+            "status": "success",
+            "round2_score": score_value,
+            "is_valid": is_valid,
+            "maveric_score_id": new_id,
+            "per_question": per_question,
+        }
+    )
+
+
+@app.post("/api/math-game/yetamax/session/submit")
+async def submit_math_session(
+    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Login required")
+
+    data = await request.json()
+    round1_score_id = int(data.get("round1_score_id") or 0)
+    round2_score_id = int(data.get("round2_score_id") or 0)
+    combined_score = int(data.get("combined_score") or 0)
+
+    if not (round1_score_id and round2_score_id):
+        raise HTTPException(status_code=400, detail="Round IDs required")
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO math_session_scores (
+                    user_id, round1_score_id, round2_score_id, combined_score
+                ) VALUES (%s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    current_user["id"],
+                    round1_score_id,
+                    round2_score_id,
+                    combined_score,
+                ),
+            )
+            new_id = cursor.fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+
+    return JSONResponse(content={"status": "success", "session_id": new_id})
 
 
 @app.get("/api/math-game/yetamax/leaderboard")
@@ -1083,6 +1274,45 @@ async def yetamax_leaderboard_api():
                     s.avg_time_ms,
                     s.created_at
                 FROM yetamax_scores s
+                JOIN users u ON u.id = s.user_id
+                WHERE s.is_valid = TRUE
+                ORDER BY s.score DESC, s.created_at ASC
+                LIMIT 20
+                """
+            )
+            rows = cursor.fetchall()
+        scores = []
+        for row in rows:
+            scores.append(
+                {
+                    "username": row["username"],
+                    "score": int(row["score"]),
+                    "correct_count": int(row["correct_count"]),
+                    "wrong_count": int(row["wrong_count"]),
+                    "avg_time_ms": float(row["avg_time_ms"]),
+                    "created_at": row["created_at"].isoformat(),
+                }
+            )
+        return JSONResponse(content={"scores": scores})
+    finally:
+        conn.close()
+
+
+@app.get("/api/math-game/maveric/leaderboard")
+async def maveric_leaderboard_api():
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    u.username,
+                    s.score,
+                    s.correct_count,
+                    s.wrong_count,
+                    s.avg_time_ms,
+                    s.created_at
+                FROM maveric_scores s
                 JOIN users u ON u.id = s.user_id
                 WHERE s.is_valid = TRUE
                 ORDER BY s.score DESC, s.created_at ASC

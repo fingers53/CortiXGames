@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yetamax Leaderboard</title>
+    <title>Maveric Leaderboard</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/auth.css">
     <link rel="stylesheet" href="/static/styles.css">
@@ -22,18 +22,18 @@
     <div class="yetamax-container">
         <header class="yetamax-header">
             <div>
-                <h1>Yetamax Leaderboard</h1>
-                <p class="subtitle">Top 20 valid runs</p>
+                <h1>Maveric</h1>
+                <p class="subtitle">Round 2 leaderboard (90s advanced mix)</p>
             </div>
             <div class="actions">
                 <a class="link" href="/math-game/yetamax">Play</a>
-                <a class="link" href="/math-game/maveric/leaderboard">Round 2 Leaderboard</a>
-                <a class="link" href="/math-game/yetamax/stats">Stats</a>
+                <a class="link" href="/math-game/yetamax/leaderboard">Round 1 Leaderboard</a>
             </div>
         </header>
 
-        <section class="panel">
-            <table class="leaderboard-table">
+        <section class="panel breakdown">
+            <h2>Top 20 scores</h2>
+            <table class="leaderboard-table" aria-label="Top Maveric scores">
                 <thead>
                     <tr>
                         <th>Rank</th>
@@ -45,25 +45,19 @@
                         <th>Date</th>
                     </tr>
                 </thead>
-                <tbody id="leaderboard-body">
-                    <tr><td colspan="7">Loading...</td></tr>
-                </tbody>
+                <tbody id="leaderboard-rows"></tbody>
             </table>
         </section>
     </div>
 
     <script>
-        fetch('/api/math-game/yetamax/leaderboard')
-            .then((resp) => resp.json())
-            .then((data) => {
-                const body = document.getElementById('leaderboard-body');
-                body.innerHTML = '';
-                const scores = data.scores || [];
-                if (!scores.length) {
-                    body.innerHTML = '<tr><td colspan="7">No scores yet.</td></tr>';
-                    return;
-                }
-                scores.forEach((row, idx) => {
+        async function loadLeaderboard() {
+            try {
+                const resp = await fetch('/api/math-game/maveric/leaderboard');
+                const data = await resp.json();
+                const tbody = document.getElementById('leaderboard-rows');
+                tbody.innerHTML = '';
+                (data.scores || []).forEach((row, idx) => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${idx + 1}</td>
@@ -74,13 +68,16 @@
                         <td>${row.avg_time_ms.toFixed(1)}</td>
                         <td>${new Date(row.created_at).toLocaleString()}</td>
                     `;
-                    body.appendChild(tr);
+                    tbody.appendChild(tr);
                 });
-            })
-            .catch(() => {
-                const body = document.getElementById('leaderboard-body');
-                body.innerHTML = '<tr><td colspan="7">Could not load leaderboard.</td></tr>';
-            });
+                if (!data.scores || data.scores.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7">No scores yet.</td></tr>';
+                }
+            } catch (err) {
+                console.error('Failed to load leaderboard', err);
+            }
+        }
+        loadLeaderboard();
     </script>
 </body>
 </html>

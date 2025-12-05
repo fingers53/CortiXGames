@@ -1,26 +1,35 @@
 const GAME_DURATION_MS = 90_000;
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
+const STATE = {
+    ROUND1: 'round1',
+    ROUND1_SUMMARY: 'round1_summary',
+    ROUND2: 'round2',
+    FINISHED: 'finished',
+};
+
+const roundLabels = {
+    [STATE.ROUND1]: 'Round 1: Yetamax',
+    [STATE.ROUND2]: 'Round 2: Maveric',
+};
+
 let timerInterval = null;
 let endTimeout = null;
+let breakInterval = null;
 let gameStartedAt = 0;
 let questionStartedAt = 0;
-let questionIndex = 0;
 let currentQuestion = null;
 let wrongAttemptsForCurrent = 0;
 let gameActive = false;
+let gameState = STATE.ROUND1;
 
-let correctCount = 0;
-let wrongCount = 0;
-let totalTimeMs = 0;
-let minTimeMs = null;
-let perQuestionTimes = [];
-const perOperatorStats = {
-    '+': { count: 0, totalTime: 0 },
-    '-': { count: 0, totalTime: 0 },
-    '*': { count: 0, totalTime: 0 },
-    '/': { count: 0, totalTime: 0 },
+const roundStats = {
+    [STATE.ROUND1]: createStats('round1'),
+    [STATE.ROUND2]: createStats('round2'),
 };
+
+let round1ServerResult = null;
+let round2ServerResult = null;
 
 const questionText = document.getElementById('question-text');
 const answerInput = document.getElementById('answer-input');
@@ -32,13 +41,26 @@ const feedbackEl = document.getElementById('feedback');
 const instructionsBlock = document.getElementById('instructions-block');
 const introPanel = document.getElementById('intro-panel');
 const gamePanel = document.getElementById('game-panel');
+const midPanel = document.getElementById('midround-panel');
 const resultPanel = document.getElementById('result-panel');
-const scoreLine = document.getElementById('score-line');
-const resultCorrect = document.getElementById('result-correct');
-const resultWrong = document.getElementById('result-wrong');
-const resultAvg = document.getElementById('result-avg');
-const resultMin = document.getElementById('result-min');
+const roundIndicator = document.getElementById('round-indicator');
+
+const round1ScoreLine = document.getElementById('round1-score-line');
+const round1Correct = document.getElementById('round1-correct');
+const round1Wrong = document.getElementById('round1-wrong');
+const round1Avg = document.getElementById('round1-avg');
+const round1Min = document.getElementById('round1-min');
+const round1OperatorRows = document.getElementById('round1-operator-rows');
+const round2Countdown = document.getElementById('round2-countdown');
+
+const combinedScoreLine = document.getElementById('combined-score-line');
+const resultRound1Score = document.getElementById('result-round1-score');
+const resultRound2Score = document.getElementById('result-round2-score');
+const resultCombinedScore = document.getElementById('result-combined-score');
+const resultRound2Min = document.getElementById('result-round2-min');
 const operatorRows = document.getElementById('operator-rows');
+const round2Rows = document.getElementById('round2-rows');
+
 const restartButton = document.getElementById('restart-button');
 const startButton = document.getElementById('start-button');
 const desktopLine = document.getElementById('desktop-line');
@@ -49,23 +71,52 @@ const isMobile =
     /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') ||
     (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches);
 
-function resetStats() {
-    correctCount = 0;
-    wrongCount = 0;
-    totalTimeMs = 0;
-    minTimeMs = null;
-    perQuestionTimes = [];
-    Object.keys(perOperatorStats).forEach((op) => {
-        perOperatorStats[op].count = 0;
-        perOperatorStats[op].totalTime = 0;
-    });
-    questionIndex = 0;
-    wrongAttemptsForCurrent = 0;
+function createStats(label) {
+    return {
+        label,
+        correctCount: 0,
+        wrongCount: 0,
+        totalTimeMs: 0,
+        minTimeMs: null,
+        perQuestions: [],
+        typeStats: {},
+    };
 }
 
-function updateHud() {
-    correctCountEl.textContent = correctCount;
-    wrongCountEl.textContent = wrongCount;
+function resetRoundStats(roundKey) {
+    roundStats[roundKey] = createStats(roundKey);
+}
+
+function resetAll() {
+    clearInterval(timerInterval);
+    clearTimeout(endTimeout);
+    clearInterval(breakInterval);
+    gameActive = false;
+    gameState = STATE.ROUND1;
+    currentQuestion = null;
+    wrongAttemptsForCurrent = 0;
+    round1ServerResult = null;
+    round2ServerResult = null;
+    resetRoundStats(STATE.ROUND1);
+    resetRoundStats(STATE.ROUND2);
+    updateHud(roundStats[STATE.ROUND1]);
+    timerDisplay.textContent = `${(GAME_DURATION_MS / 1000).toFixed(1)}s`;
+    feedbackEl.textContent = '';
+    instructionsBlock?.classList.remove('hidden');
+    introPanel.classList.remove('hidden');
+    gamePanel.classList.add('hidden');
+    midPanel.classList.add('hidden');
+    resultPanel.classList.add('hidden');
+    updateRoundIndicator(STATE.ROUND1);
+}
+
+function updateRoundIndicator(roundKey) {
+    roundIndicator.textContent = roundLabels[roundKey] || '';
+}
+
+function updateHud(stats) {
+    correctCountEl.textContent = stats.correctCount;
+    wrongCountEl.textContent = stats.wrongCount;
 }
 
 function applyDeviceUi() {
@@ -95,8 +146,15 @@ function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function generateQuestion() {
-    const difficultyLevel = Math.floor(correctCount / 10);
+function randomDigitInt(digits) {
+    const low = 10 ** (digits - 1);
+    const high = 10 ** digits - 1;
+    return randomInt(low, high);
+}
+
+function generateRound1Question() {
+    const stats = roundStats[STATE.ROUND1];
+    const difficultyLevel = Math.floor(stats.correctCount / 10);
     const operatorWeights = {
         '+': 1,
         '-': 1,
@@ -119,14 +177,13 @@ function generateQuestion() {
         answer = a + b;
     } else if (operator === '-') {
         a = randomInt(addMin, addMax);
-        b = randomInt(2, a); // keep non-negative
+        b = randomInt(2, a);
         answer = a - b;
     } else if (operator === '*') {
         a = randomInt(2, 12);
         b = randomInt(mulBMin, 100);
         answer = a * b;
     } else {
-        // division based on multiplication pairs
         b = randomInt(2, 12);
         const multiplier = randomInt(mulBMin, 100);
         answer = multiplier;
@@ -134,7 +191,140 @@ function generateQuestion() {
     }
 
     const expression = `${a} ${operator} ${b}`;
-    return { operator, a, b, answer, expression };
+    return { operator, a, b, answer, expression, category: operator };
+}
+
+// Round 2 generators per spec
+function genIntAddSub() {
+    const digits = Math.random() < 0.75 ? 4 : 5;
+    let a = randomDigitInt(digits);
+    let b = randomDigitInt(digits);
+    const op = Math.random() < 0.5 ? '+' : '-';
+    if (op === '-' && Math.random() < 0.3) {
+        const sorted = [a, b].sort((x, y) => x - y);
+        [a, b] = sorted;
+    }
+    const expr = `${a} ${op} ${b}`;
+    const ans = op === '+' ? a + b : a - b;
+    return { expression: expr, answer: ans, category: 'int_add_sub' };
+}
+
+function genIntDivInt() {
+    const q = randomInt(6, 99);
+    const divisors = [3, 5, 7, 9, 12, 15, 16, 17, 48];
+    const d = divisors[randomInt(0, divisors.length - 1)];
+    const n = q * d;
+    return { expression: `${n} / ${d}`, answer: n / d, category: 'int_div_int' };
+}
+
+function genIntMult() {
+    const a = randomInt(24, 999);
+    const factors = [6, 7, 8, 9, 12, 18];
+    const b = factors[randomInt(0, factors.length - 1)];
+    return { expression: `${a} × ${b}`, answer: a * b, category: 'int_mult' };
+}
+
+function genDecDiv() {
+    const numerators = [48, 56, 64, 72, 84, 90, 98, 120];
+    const denoms = [0.2, 0.4, 0.8];
+    const numerator = numerators[randomInt(0, numerators.length - 1)];
+    const denom = denoms[randomInt(0, denoms.length - 1)];
+    return { expression: `${numerator} / ${denom}`, answer: numerator / denom, category: 'dec_div' };
+}
+
+function genDecMult() {
+    const bases = [120, 135, 144, 150, 160, 180, 200];
+    const factors = [0.3, 0.4, 0.6, 0.7];
+    const base = bases[randomInt(0, bases.length - 1)];
+    const factor = factors[randomInt(0, factors.length - 1)];
+    return { expression: `${base} × ${factor}`, answer: base * factor, category: 'dec_mult' };
+}
+
+function genPercentOf() {
+    const base = randomInt(150, 400);
+    const pct = [25, 50, 75][randomInt(0, 2)];
+    return { expression: `${pct}% of ${base}`, answer: (base * pct) / 100, category: 'percent_of' };
+}
+
+function genPercentIncrease() {
+    const base = randomDigitInt(3);
+    const pct = 10;
+    return { expression: `${base} + ${pct}%`, answer: base * 1.1, category: 'percent_increase' };
+}
+
+function genMissingPercent() {
+    const base = randomInt(1000, 4000);
+    const pctOptions = [25, 35, 50, 75];
+    const pct = pctOptions[randomInt(0, pctOptions.length - 1)];
+    const value = (base * pct) / 100;
+    return { expression: `_ % of ${base} = ${value.toFixed(1)}`, answer: pct, category: 'missing_percent' };
+}
+
+function genMissingEquation() {
+    const template = ['proportion', 'balance_add', 'prod_missing', 'digit_missing'][randomInt(0, 3)];
+
+    if (template === 'proportion') {
+        const a = randomInt(4, 12);
+        const b = randomInt(2, 9);
+        const left = a * b;
+        const denLeft = a;
+        const denRight = [3, 4, 5, 6][randomInt(0, 3)];
+        const numRight = (left * denRight) / denLeft;
+        return { expression: `${left} / ${denLeft} = _ / ${denRight}`, answer: numRight, category: 'missing_equation' };
+    }
+
+    if (template === 'balance_add') {
+        const x = randomInt(100, 999);
+        const y = randomInt(100, 999);
+        const total = x + y;
+        const z = randomInt(100, 999);
+        const missing = total - z;
+        return { expression: `${x} + ${y} = ${z} - _`, answer: missing, category: 'missing_equation' };
+    }
+
+    if (template === 'prod_missing') {
+        const a = randomInt(2, 30);
+        const b = randomInt(2, 20);
+        const prod = a * b;
+        const candidates = Array.from({ length: 19 }, (_, idx) => idx + 2).filter((d) => prod % d === 0);
+        const c = candidates[randomInt(0, candidates.length - 1)];
+        const missing = prod / c;
+        return { expression: `${a} × ${b} = ${c} × _`, answer: missing, category: 'missing_equation' };
+    }
+
+    const first = randomDigitInt(3);
+    const missingDigit = randomInt(0, 9);
+    const tail = randomInt(10, 99);
+    const second = 5000 + missingDigit * 100 + tail;
+    const total = first + second;
+    return { expression: `${first} + 5_${tail} = ${total}`, answer: missingDigit, category: 'missing_equation' };
+}
+
+const round2Generators = [
+    genIntAddSub,
+    genMissingEquation,
+    genIntDivInt,
+    genIntMult,
+    genPercentOf,
+    genDecDiv,
+    genDecMult,
+    genPercentIncrease,
+    genMissingPercent,
+];
+
+const round2Weights = [21, 8, 6, 4, 4, 2, 2, 2, 1];
+
+function generateRound2Question() {
+    const totalWeight = round2Weights.reduce((sum, val) => sum + val, 0);
+    let roll = Math.random() * totalWeight;
+    for (let i = 0; i < round2Generators.length; i++) {
+        const weight = round2Weights[i];
+        if (roll < weight) {
+            return round2Generators[i]();
+        }
+        roll -= weight;
+    }
+    return round2Generators[0]();
 }
 
 function showQuestion(question) {
@@ -154,42 +344,51 @@ function startTimer() {
         const remaining = Math.max(0, GAME_DURATION_MS - elapsed);
         timerDisplay.textContent = `${(remaining / 1000).toFixed(1)}s`;
         if (remaining <= 0) {
-            endGame(true);
+            endRound(true);
         }
     }, 100);
-    endTimeout = setTimeout(() => endGame(true), GAME_DURATION_MS + 50);
+    endTimeout = setTimeout(() => endRound(true), GAME_DURATION_MS + 50);
 }
 
-function startGame() {
-    resetStats();
-    updateHud();
+function startRound(roundKey) {
+    clearInterval(breakInterval);
+    wrongAttemptsForCurrent = 0;
+    gameState = roundKey;
+    gameActive = true;
+    const stats = roundStats[roundKey];
+    resetRoundStats(roundKey);
+    updateRoundIndicator(roundKey);
+    updateHud(roundStats[roundKey]);
     introPanel.classList.add('hidden');
+    midPanel.classList.add('hidden');
     resultPanel.classList.add('hidden');
     gamePanel.classList.remove('hidden');
     instructionsBlock?.classList.add('hidden');
     answerInput.disabled = false;
-    gameActive = true;
     timerDisplay.textContent = `${(GAME_DURATION_MS / 1000).toFixed(1)}s`;
-
     startTimer();
-    showQuestion(generateQuestion());
+    const question = roundKey === STATE.ROUND1 ? generateRound1Question() : generateRound2Question();
+    showQuestion(question);
 }
 
 function handleWrongAnswer() {
-    wrongCount += 1;
+    const stats = roundStats[gameState];
+    stats.wrongCount += 1;
     wrongAttemptsForCurrent += 1;
-    updateHud();
+    updateHud(stats);
     feedbackEl.textContent = 'Try again';
 }
 
 function handleCorrectAnswer() {
+    const stats = roundStats[gameState];
     const timeMs = Math.max(0, performance.now() - questionStartedAt);
-    correctCount += 1;
-    totalTimeMs += timeMs;
-    minTimeMs = minTimeMs === null ? timeMs : Math.min(minTimeMs, timeMs);
+    stats.correctCount += 1;
+    stats.totalTimeMs += timeMs;
+    stats.minTimeMs = stats.minTimeMs === null ? timeMs : Math.min(stats.minTimeMs, timeMs);
 
-    perQuestionTimes.push({
-        index: questionIndex + 1,
+    stats.perQuestions.push({
+        index: stats.perQuestions.length + 1,
+        category: currentQuestion.category,
         operator: currentQuestion.operator,
         expression: currentQuestion.expression,
         a: currentQuestion.a,
@@ -198,56 +397,49 @@ function handleCorrectAnswer() {
         wrong_attempts: wrongAttemptsForCurrent,
     });
 
-    const opStats = perOperatorStats[currentQuestion.operator];
-    opStats.count += 1;
-    opStats.totalTime += timeMs;
+    const key = currentQuestion.category || currentQuestion.operator;
+    if (!stats.typeStats[key]) {
+        stats.typeStats[key] = { count: 0, totalTime: 0 };
+    }
+    stats.typeStats[key].count += 1;
+    stats.typeStats[key].totalTime += timeMs;
 
-    updateHud();
-    questionIndex += 1;
-    showQuestion(generateQuestion());
+    updateHud(stats);
+    const nextQuestion = gameState === STATE.ROUND1 ? generateRound1Question() : generateRound2Question();
+    showQuestion(nextQuestion);
 }
 
-function calculateLocalScore(avgTimeMs) {
+function calculateAvgTime(stats) {
+    return stats.correctCount > 0 ? stats.totalTimeMs / stats.correctCount : 0;
+}
+
+function calculateLocalScore(stats) {
+    const avgTimeMs = calculateAvgTime(stats);
     const safeAvg = avgTimeMs > 0 ? avgTimeMs : Number.POSITIVE_INFINITY;
     const speedBonus = safeAvg === Infinity ? 0 : Math.max(0, Math.floor(3000 / safeAvg));
-    return correctCount * 10 - wrongCount * 2 + speedBonus;
+    return stats.correctCount * 10 - stats.wrongCount * 2 + speedBonus;
 }
 
-function buildOperatorBreakdown(avgByOp) {
-    operatorRows.innerHTML = '';
-    const entries = Object.entries(avgByOp);
+function buildOperatorBreakdown(targetEl, statsMap) {
+    targetEl.innerHTML = '';
+    const entries = Object.entries(statsMap || {});
     if (!entries.length) {
-        operatorRows.innerHTML = '<tr><td colspan="3">No answers recorded.</td></tr>';
+        targetEl.innerHTML = '<tr><td colspan="3">No answers recorded.</td></tr>';
         return;
     }
     entries.forEach(([op, info]) => {
+        const avg = info.count > 0 ? info.totalTime / info.count : 0;
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${op}</td>
             <td>${info.count}</td>
-            <td>${info.avg_time_ms.toFixed(1)}</td>
+            <td>${avg.toFixed(1)}</td>
         `;
-        operatorRows.appendChild(row);
+        targetEl.appendChild(row);
     });
 }
 
-function showResults(payload, response) {
-    const avgTimeMs = payload.avg_time_ms;
-    const minMs = payload.min_time_ms;
-    const score = response?.score ?? calculateLocalScore(avgTimeMs);
-
-    scoreLine.textContent = `Score: ${score}${response && response.is_valid === false ? ' (flagged)' : ''}`;
-    resultCorrect.textContent = payload.correct_count;
-    resultWrong.textContent = payload.wrong_count;
-    resultAvg.textContent = `${avgTimeMs.toFixed(1)} ms`;
-    resultMin.textContent = `${minMs.toFixed(1)} ms`;
-    buildOperatorBreakdown(payload.avg_time_by_operator);
-
-    gamePanel.classList.add('hidden');
-    resultPanel.classList.remove('hidden');
-}
-
-async function submitResults(payload) {
+async function submitRound1Results(payload) {
     try {
         const resp = await fetch('/api/math-game/yetamax/submit', {
             method: 'POST',
@@ -257,51 +449,175 @@ async function submitResults(payload) {
             },
             body: JSON.stringify(payload),
         });
-        if (!resp.ok) {
-            throw new Error(`HTTP ${resp.status}`);
-        }
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         return await resp.json();
     } catch (err) {
-        console.error('Failed to submit results', err);
+        console.error('Failed to submit round 1', err);
         return null;
     }
 }
 
-function endGame(endedByTimeout) {
+async function submitRound2Results(payload) {
+    try {
+        const resp = await fetch('/api/math-game/yetamax/round2/submit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken,
+            },
+            body: JSON.stringify(payload),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return await resp.json();
+    } catch (err) {
+        console.error('Failed to submit round 2', err);
+        return null;
+    }
+}
+
+async function submitSessionLink(round1Id, round2Id, combinedScore) {
+    try {
+        const resp = await fetch('/api/math-game/yetamax/session/submit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken,
+            },
+            body: JSON.stringify({
+                round1_score_id: round1Id,
+                round2_score_id: round2Id,
+                combined_score: combinedScore,
+            }),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return await resp.json();
+    } catch (err) {
+        console.error('Failed to submit combined session', err);
+        return null;
+    }
+}
+
+function endRound(endedByTimeout) {
     if (!gameActive) return;
     gameActive = false;
     clearInterval(timerInterval);
     clearTimeout(endTimeout);
     answerInput.disabled = true;
 
+    const stats = roundStats[gameState];
     const runDuration = performance.now() - gameStartedAt;
-    const avgTimeMs = correctCount > 0 ? totalTimeMs / correctCount : 0;
-    const avgTimeByOperator = {};
-    Object.entries(perOperatorStats).forEach(([op, stats]) => {
-        if (stats.count > 0) {
-            avgTimeByOperator[op] = {
-                count: stats.count,
-                avg_time_ms: stats.totalTime / stats.count,
-            };
+    const avgTimeMs = calculateAvgTime(stats);
+
+    if (gameState === STATE.ROUND1) {
+        const avgTimeByOperator = {};
+        Object.entries(stats.typeStats).forEach(([key, val]) => {
+            if (val.count > 0) {
+                avgTimeByOperator[key] = {
+                    count: val.count,
+                    avg_time_ms: val.totalTime / val.count,
+                };
+            }
+        });
+
+        const payload = {
+            correct_count: stats.correctCount,
+            wrong_count: stats.wrongCount,
+            avg_time_ms: avgTimeMs,
+            min_time_ms: stats.minTimeMs ?? 0,
+            per_question_times: stats.perQuestions,
+            avg_time_by_operator: avgTimeByOperator,
+            total_time_ms: stats.totalTimeMs,
+            run_duration_ms: runDuration,
+            ended_by_timeout: endedByTimeout,
+            version: 'v1',
+        };
+
+        submitRound1Results(payload).then((resp) => {
+            const score = resp?.score ?? calculateLocalScore(stats);
+            round1ServerResult = { ...payload, score, is_valid: resp?.is_valid, id: resp?.yetamax_score_id };
+            showRound1Summary(payload, resp, score);
+        });
+    } else if (gameState === STATE.ROUND2) {
+        const typeBreakdown = {};
+        Object.entries(stats.typeStats).forEach(([key, val]) => {
+            if (val.count > 0) {
+                typeBreakdown[key] = {
+                    count: val.count,
+                    avg_time_ms: val.totalTime / val.count,
+                };
+            }
+        });
+
+        const payload = {
+            correct_count: stats.correctCount,
+            wrong_count: stats.wrongCount,
+            avg_time_ms: avgTimeMs,
+            min_time_ms: stats.minTimeMs ?? 0,
+            total_questions: stats.perQuestions.length,
+            per_question: stats.perQuestions,
+            ended_by_timeout: endedByTimeout,
+            type_breakdown: typeBreakdown,
+            score_client: calculateLocalScore(stats),
+        };
+
+        submitRound2Results(payload).then((resp) => {
+            const score = resp?.round2_score ?? calculateLocalScore(stats);
+            round2ServerResult = { ...payload, score, is_valid: resp?.is_valid, id: resp?.maveric_score_id };
+            const combined = (round1ServerResult?.score || 0) + score;
+            if (round1ServerResult?.id && resp?.maveric_score_id) {
+                submitSessionLink(round1ServerResult.id, resp.maveric_score_id, combined);
+            }
+            showFinalResults(score, combined, typeBreakdown);
+        });
+    }
+}
+
+function showRound1Summary(payload, response, score) {
+    const stats = roundStats[STATE.ROUND1];
+    gamePanel.classList.add('hidden');
+    midPanel.classList.remove('hidden');
+    gameState = STATE.ROUND1_SUMMARY;
+
+    round1ScoreLine.textContent = `Round 1 score: ${score}${response && response.is_valid === false ? ' (flagged)' : ''}`;
+    round1Correct.textContent = payload.correct_count;
+    round1Wrong.textContent = payload.wrong_count;
+    round1Avg.textContent = `${payload.avg_time_ms.toFixed(1)} ms`;
+    round1Min.textContent = `${(payload.min_time_ms ?? 0).toFixed(1)} ms`;
+    buildOperatorBreakdown(round1OperatorRows, stats.typeStats);
+
+    let countdown = 3;
+    round2Countdown.textContent = `Starting Round 2 in ${countdown}...`;
+    breakInterval = setInterval(() => {
+        countdown -= 1;
+        if (countdown <= 0) {
+            clearInterval(breakInterval);
+            startRound(STATE.ROUND2);
+        } else {
+            round2Countdown.textContent = `Starting Round 2 in ${countdown}...`;
         }
-    });
+    }, 1000);
+}
 
-    const payload = {
-        correct_count: correctCount,
-        wrong_count: wrongCount,
-        avg_time_ms: avgTimeMs,
-        min_time_ms: minTimeMs ?? 0,
-        per_question_times: perQuestionTimes,
-        avg_time_by_operator: avgTimeByOperator,
-        total_time_ms: totalTimeMs,
-        run_duration_ms: runDuration,
-        ended_by_timeout: endedByTimeout,
-        version: 'v1',
-    };
+function showFinalResults(round2Score, combinedScore, typeBreakdown) {
+    const round1Score = round1ServerResult?.score ?? calculateLocalScore(roundStats[STATE.ROUND1]);
+    gamePanel.classList.add('hidden');
+    midPanel.classList.add('hidden');
+    resultPanel.classList.remove('hidden');
+    gameState = STATE.FINISHED;
 
-    submitResults(payload).then((resp) => {
-        showResults(payload, resp);
-    });
+    combinedScoreLine.textContent = `Combined score: ${combinedScore}`;
+    resultRound1Score.textContent = round1Score;
+    resultRound2Score.textContent = round2Score;
+    resultCombinedScore.textContent = combinedScore;
+    resultRound2Min.textContent = `${(roundStats[STATE.ROUND2].minTimeMs ?? 0).toFixed(1)} ms`;
+
+    buildOperatorBreakdown(operatorRows, roundStats[STATE.ROUND1].typeStats);
+    buildOperatorBreakdown(round2Rows, typeBreakdown);
+}
+
+function answersMatch(expected, provided) {
+    const tolerance = Math.abs(expected) < 1 ? 1e-6 : 0.01;
+    return Math.abs(expected - provided) < tolerance;
 }
 
 function handleAnswerSubmit() {
@@ -311,7 +627,7 @@ function handleAnswerSubmit() {
     const value = Number(trimmed);
     if (!Number.isFinite(value)) return;
 
-    if (value === currentQuestion.answer) {
+    if (answersMatch(currentQuestion.answer, value)) {
         handleCorrectAnswer();
         answerInput.value = '';
     } else {
@@ -345,16 +661,15 @@ answerForm?.addEventListener('submit', (event) => {
 
 startButton?.addEventListener('click', () => {
     if (gameActive) return;
-    startGame();
+    startRound(STATE.ROUND1);
 });
 
 restartButton?.addEventListener('click', () => {
     if (gameActive) return;
-    introPanel.classList.remove('hidden');
-    resultPanel.classList.add('hidden');
-    instructionsBlock?.classList.remove('hidden');
+    resetAll();
 });
 
 keypad?.addEventListener('click', handleKeypadInteraction);
 
 applyDeviceUi();
+resetAll();

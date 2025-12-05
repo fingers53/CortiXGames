@@ -31,6 +31,14 @@ body {
     margin: 4px 0 0 0;
 }
 
+.round-indicator {
+    margin-top: 4px;
+    font-size: 0.9rem;
+    color: #7cf0a3;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
 .timer {
     font-size: 1.6rem;
     font-weight: 700;
@@ -94,12 +102,13 @@ body {
 }
 
 .submit-button {
-    min-width: 150px;
+    min-width: 180px;
     font-size: 1.1rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
+    padding: 12px 18px;
 }
 
 .primary {
@@ -155,6 +164,11 @@ body {
     margin-bottom: 12px;
 }
 
+.result-grid strong {
+    display: inline-block;
+    min-width: 120px;
+}
+
 .actions {
     display: flex;
     gap: 12px;
@@ -192,6 +206,20 @@ body {
     transform: translateX(-50%);
     font-size: 0.8rem;
     color: #5ef2a3;
+}
+
+.two-column {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-top: 12px;
+}
+
+.countdown {
+    margin-top: 12px;
+    text-align: center;
+    font-weight: bold;
+    color: #b7f7d1;
 }
 
 .difficulty-grid {

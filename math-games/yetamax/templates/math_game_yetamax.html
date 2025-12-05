@@ -25,13 +25,14 @@
             <div>
                 <h1>Yetamax</h1>
                 <p class="subtitle">90 seconds of Zetamac-style arithmetic</p>
+                <p id="round-indicator" class="round-indicator">Round 1: Yetamax</p>
             </div>
             <div class="timer" id="timer-display">90.0s</div>
         </header>
 
         <section id="intro-panel" class="panel">
             <p>Press start to begin a 90 second sprint. Answer each question correctly to move on. Wrong answers add to your miss count but you stay on the same question.</p>
-            <button id="start-button" class="primary">Start Yetamax</button>
+            <button id="start-button" class="primary">Start Round 1</button>
         </section>
 
         <section id="game-panel" class="panel hidden">
@@ -81,28 +82,61 @@
             </div>
         </section>
 
-        <section id="result-panel" class="panel hidden">
-            <h2>Run complete</h2>
-            <p id="score-line" class="score-line"></p>
+        <section id="midround-panel" class="panel hidden">
+            <h2>Round 1 complete</h2>
+            <p id="round1-score-line" class="score-line"></p>
             <div class="result-grid">
-                <div><strong>Correct:</strong> <span id="result-correct">0</span></div>
-                <div><strong>Wrong attempts:</strong> <span id="result-wrong">0</span></div>
-                <div><strong>Avg time:</strong> <span id="result-avg">0 ms</span></div>
-                <div><strong>Fastest:</strong> <span id="result-min">0 ms</span></div>
+                <div><strong>Correct:</strong> <span id="round1-correct">0</span></div>
+                <div><strong>Wrong attempts:</strong> <span id="round1-wrong">0</span></div>
+                <div><strong>Avg time:</strong> <span id="round1-avg">0 ms</span></div>
+                <div><strong>Fastest:</strong> <span id="round1-min">0 ms</span></div>
             </div>
-            <div id="operator-breakdown" class="panel breakdown">
-                <h3>By operator</h3>
+            <div id="round1-breakdown" class="panel breakdown">
+                <h3>Round 1 by operator</h3>
                 <table>
                     <thead>
                         <tr><th>Op</th><th>Count</th><th>Avg time (ms)</th></tr>
                     </thead>
-                    <tbody id="operator-rows"></tbody>
+                    <tbody id="round1-operator-rows"></tbody>
                 </table>
+            </div>
+            <div class="countdown" id="round2-countdown">Starting Round 2 in 3...</div>
+        </section>
+
+        <section id="result-panel" class="panel hidden">
+            <h2>Session complete</h2>
+            <p id="combined-score-line" class="score-line"></p>
+            <div class="result-grid">
+                <div><strong>Round 1 score:</strong> <span id="result-round1-score">0</span></div>
+                <div><strong>Round 2 score:</strong> <span id="result-round2-score">0</span></div>
+                <div><strong>Combined:</strong> <span id="result-combined-score">0</span></div>
+                <div><strong>Round 2 fastest:</strong> <span id="result-round2-min">0 ms</span></div>
+            </div>
+            <div class="two-column">
+                <div id="operator-breakdown" class="panel breakdown">
+                    <h3>Round 1 by operator</h3>
+                    <table>
+                        <thead>
+                            <tr><th>Op</th><th>Count</th><th>Avg time (ms)</th></tr>
+                        </thead>
+                        <tbody id="operator-rows"></tbody>
+                    </table>
+                </div>
+                <div id="round2-breakdown" class="panel breakdown">
+                    <h3>Round 2 by type</h3>
+                    <table>
+                        <thead>
+                            <tr><th>Type</th><th>Count</th><th>Avg time (ms)</th></tr>
+                        </thead>
+                        <tbody id="round2-rows"></tbody>
+                    </table>
+                </div>
             </div>
             <div class="actions">
                 <button id="restart-button" class="primary">Play again</button>
                 <a class="link" href="/">Home</a>
-                <a class="link" href="/math-game/yetamax/leaderboard">Leaderboard</a>
+                <a class="link" href="/math-game/yetamax/leaderboard">Round 1 Leaderboard</a>
+                <a class="link" href="/math-game/maveric/leaderboard">Round 2 Leaderboard</a>
                 <a class="link" href="/math-game/yetamax/stats">Stats</a>
             </div>
         </section>

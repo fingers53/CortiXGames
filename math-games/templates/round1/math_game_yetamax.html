@@ -38,12 +38,15 @@
         <section id="game-panel" class="panel hidden">
             <div class="instructions" id="instructions-block">
                 <p>You have 90 seconds. Type the correct answer to each problem. A new problem appears only after you enter the correct answer.</p>
+                <p><strong>Maveric (Round 2) mixes tougher arithmetic:</strong> large integer addition/subtraction, integer and decimal division, decimal multipliers, percents, and missing-value equations.</p>
+                <p>Every question in both rounds has a 30 second cap—if time runs out it auto-skips, counts as a timeout, and moves you onward.</p>
                 <p id="desktop-line" class="device-line">On desktop, use your keyboard and press Enter to submit.</p>
                 <p id="mobile-line" class="device-line hidden">On mobile, you can use the on-screen number pad or your device keyboard to answer.</p>
             </div>
             <div class="hud">
                 <div><strong>Correct:</strong> <span id="correct-count">0</span></div>
                 <div><strong>Wrong attempts:</strong> <span id="wrong-count">0</span></div>
+                <div><strong>Timed out:</strong> <span id="timeout-count">0</span></div>
             </div>
             <div class="question-box">
                 <div id="question-text" class="question">Ready?</div>
@@ -96,6 +99,8 @@
                 <div><strong>Round 2 score:</strong> <span id="result-round2-score">0</span></div>
                 <div><strong>Combined:</strong> <span id="result-combined-score">0</span></div>
                 <div><strong>Round 2 fastest:</strong> <span id="result-round2-min">0 ms</span></div>
+                <div><strong>Round 1 timeouts:</strong> <span id="result-round1-timeouts">0</span></div>
+                <div><strong>Round 2 timeouts:</strong> <span id="result-round2-timeouts">0</span></div>
             </div>
             <div class="two-column">
                 <div id="operator-breakdown" class="panel breakdown">

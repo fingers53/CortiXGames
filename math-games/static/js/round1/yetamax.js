@@ -1,4 +1,5 @@
 const GAME_DURATION_MS = 90_000;
+const QUESTION_TIME_LIMIT_MS = 30_000;
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
 const STATE = {
@@ -16,6 +17,7 @@ const roundLabels = {
 let timerInterval = null;
 let endTimeout = null;
 let breakInterval = null;
+let questionTimeout = null;
 let gameStartedAt = 0;
 let questionStartedAt = 0;
 let currentQuestion = null;
@@ -36,6 +38,7 @@ const answerInput = document.getElementById('answer-input');
 const answerForm = document.getElementById('answer-form');
 const correctCountEl = document.getElementById('correct-count');
 const wrongCountEl = document.getElementById('wrong-count');
+const timeoutCountEl = document.getElementById('timeout-count');
 const timerDisplay = document.getElementById('timer-display');
 const feedbackEl = document.getElementById('feedback');
 const instructionsBlock = document.getElementById('instructions-block');
@@ -52,6 +55,8 @@ const resultRound1Score = document.getElementById('result-round1-score');
 const resultRound2Score = document.getElementById('result-round2-score');
 const resultCombinedScore = document.getElementById('result-combined-score');
 const resultRound2Min = document.getElementById('result-round2-min');
+const resultRound1Timeouts = document.getElementById('result-round1-timeouts');
+const resultRound2Timeouts = document.getElementById('result-round2-timeouts');
 const operatorRows = document.getElementById('operator-rows');
 const round2Rows = document.getElementById('round2-rows');
 
@@ -70,6 +75,7 @@ function createStats(label) {
         label,
         correctCount: 0,
         wrongCount: 0,
+        timedOutCount: 0,
         totalTimeMs: 0,
         minTimeMs: null,
         perQuestions: [],
@@ -85,6 +91,7 @@ function resetAll() {
     clearInterval(timerInterval);
     clearTimeout(endTimeout);
     clearInterval(breakInterval);
+    clearTimeout(questionTimeout);
     gameActive = false;
     gameState = STATE.ROUND1;
     currentQuestion = null;
@@ -111,6 +118,7 @@ function updateRoundIndicator(roundKey) {
 function updateHud(stats) {
     correctCountEl.textContent = stats.correctCount;
     wrongCountEl.textContent = stats.wrongCount;
+    timeoutCountEl.textContent = stats.timedOutCount || 0;
 }
 
 function applyDeviceUi() {
@@ -321,6 +329,20 @@ function generateRound2Question() {
     return round2Generators[0]();
 }
 
+function clearQuestionTimer() {
+    if (questionTimeout) {
+        clearTimeout(questionTimeout);
+        questionTimeout = null;
+    }
+}
+
+function startQuestionTimer() {
+    clearQuestionTimer();
+    questionTimeout = setTimeout(() => {
+        handleQuestionTimeout();
+    }, QUESTION_TIME_LIMIT_MS);
+}
+
 function showQuestion(question) {
     currentQuestion = question;
     wrongAttemptsForCurrent = 0;
@@ -329,6 +351,7 @@ function showQuestion(question) {
     feedbackEl.textContent = '';
     answerInput.value = '';
     answerInput.focus();
+    startQuestionTimer();
 }
 
 function startTimer() {
@@ -373,8 +396,34 @@ function handleWrongAnswer() {
     feedbackEl.textContent = 'Try again';
 }
 
+function handleQuestionTimeout() {
+    if (!gameActive) return;
+    const stats = roundStats[gameState];
+    clearQuestionTimer();
+    const timeMs = Math.max(0, performance.now() - questionStartedAt);
+    stats.wrongCount += 1;
+    stats.timedOutCount += 1;
+
+    stats.perQuestions.push({
+        index: stats.perQuestions.length + 1,
+        category: currentQuestion.category,
+        operator: currentQuestion.operator,
+        expression: currentQuestion.expression,
+        a: currentQuestion.a,
+        b: currentQuestion.b,
+        time_ms: Math.round(Math.min(timeMs, QUESTION_TIME_LIMIT_MS)),
+        wrong_attempts: wrongAttemptsForCurrent,
+        timed_out: true,
+    });
+
+    updateHud(stats);
+    const nextQuestion = gameState === STATE.ROUND1 ? generateRound1Question() : generateRound2Question();
+    showQuestion(nextQuestion);
+}
+
 function handleCorrectAnswer() {
     const stats = roundStats[gameState];
+    clearQuestionTimer();
     const timeMs = Math.max(0, performance.now() - questionStartedAt);
     stats.correctCount += 1;
     stats.totalTimeMs += timeMs;
@@ -389,6 +438,7 @@ function handleCorrectAnswer() {
         b: currentQuestion.b,
         time_ms: Math.round(timeMs),
         wrong_attempts: wrongAttemptsForCurrent,
+        timed_out: false,
     });
 
     const key = currentQuestion.category || currentQuestion.operator;
@@ -496,6 +546,7 @@ function endRound(endedByTimeout) {
     gameActive = false;
     clearInterval(timerInterval);
     clearTimeout(endTimeout);
+    clearQuestionTimer();
     answerInput.disabled = true;
 
     const stats = roundStats[gameState];
@@ -523,6 +574,7 @@ function endRound(endedByTimeout) {
             total_time_ms: stats.totalTimeMs,
             run_duration_ms: runDuration,
             ended_by_timeout: endedByTimeout,
+            timed_out_count: stats.timedOutCount,
             version: 'v1',
         };
 
@@ -552,6 +604,7 @@ function endRound(endedByTimeout) {
             ended_by_timeout: endedByTimeout,
             type_breakdown: typeBreakdown,
             score_client: calculateLocalScore(stats),
+            timed_out_count: stats.timedOutCount,
         };
 
         submitRound2Results(payload).then((resp) => {
@@ -600,6 +653,8 @@ function showFinalResults(round2Score, combinedScore, typeBreakdown) {
     resultRound2Score.textContent = round2Score;
     resultCombinedScore.textContent = combinedScore;
     resultRound2Min.textContent = `${(roundStats[STATE.ROUND2].minTimeMs ?? 0).toFixed(1)} ms`;
+    resultRound1Timeouts.textContent = roundStats[STATE.ROUND1].timedOutCount;
+    resultRound2Timeouts.textContent = roundStats[STATE.ROUND2].timedOutCount;
 
     buildOperatorBreakdown(operatorRows, roundStats[STATE.ROUND1].typeStats);
     buildOperatorBreakdown(round2Rows, typeBreakdown);

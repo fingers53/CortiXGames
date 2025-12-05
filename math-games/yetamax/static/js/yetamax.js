@@ -29,6 +29,7 @@ const correctCountEl = document.getElementById('correct-count');
 const wrongCountEl = document.getElementById('wrong-count');
 const timerDisplay = document.getElementById('timer-display');
 const feedbackEl = document.getElementById('feedback');
+const instructionsBlock = document.getElementById('instructions-block');
 const introPanel = document.getElementById('intro-panel');
 const gamePanel = document.getElementById('game-panel');
 const resultPanel = document.getElementById('result-panel');
@@ -165,6 +166,7 @@ function startGame() {
     introPanel.classList.add('hidden');
     resultPanel.classList.add('hidden');
     gamePanel.classList.remove('hidden');
+    instructionsBlock?.classList.add('hidden');
     answerInput.disabled = false;
     gameActive = true;
     timerDisplay.textContent = `${(GAME_DURATION_MS / 1000).toFixed(1)}s`;
@@ -350,6 +352,7 @@ restartButton?.addEventListener('click', () => {
     if (gameActive) return;
     introPanel.classList.remove('hidden');
     resultPanel.classList.add('hidden');
+    instructionsBlock?.classList.remove('hidden');
 });
 
 keypad?.addEventListener('click', handleKeypadInteraction);

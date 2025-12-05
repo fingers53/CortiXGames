@@ -50,13 +50,13 @@ def get_db_connection():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
-def ensure_math_scores_table():
+def ensure_yetamax_scores_table():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                CREATE TABLE IF NOT EXISTS math_scores (
+                CREATE TABLE IF NOT EXISTS yetamax_scores (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id),
                     score INTEGER NOT NULL,
@@ -72,23 +72,50 @@ def ensure_math_scores_table():
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_math_scores_score_created_at
-                ON math_scores (score DESC, created_at ASC)
+                CREATE INDEX IF NOT EXISTS idx_yetamax_scores_score_created_at
+                ON yetamax_scores (score DESC, created_at ASC)
                 """
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_math_scores_user_recent
-                ON math_scores (user_id, created_at DESC)
+                CREATE INDEX IF NOT EXISTS idx_yetamax_scores_user_recent
+                ON yetamax_scores (user_id, created_at DESC)
                 """
             )
+
+            # Optional migration from the older math_scores table to avoid data loss
+            cursor.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = 'math_scores'
+                )
+                """
+            )
+            old_table_exists = cursor.fetchone()[0]
+
+            if old_table_exists:
+                cursor.execute("SELECT COUNT(*) FROM yetamax_scores")
+                new_count = cursor.fetchone()[0]
+                if new_count == 0:
+                    cursor.execute(
+                        """
+                        INSERT INTO yetamax_scores (
+                            user_id, score, correct_count, wrong_count,
+                            avg_time_ms, min_time_ms, is_valid, raw_payload, created_at
+                        )
+                        SELECT user_id, score, correct_count, wrong_count,
+                               avg_time_ms, min_time_ms, is_valid, raw_payload, created_at
+                        FROM math_scores
+                        """
+                    )
         conn.commit()
     finally:
         conn.close()
 
 
 # Ensure Yetamax storage exists on startup
-ensure_math_scores_table()
+ensure_yetamax_scores_table()
 
 
 def read_html(file_name: str) -> str:
@@ -1006,7 +1033,7 @@ async def submit_yetamax_score(
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO math_scores (
+                INSERT INTO yetamax_scores (
                     user_id, score, correct_count, wrong_count,
                     avg_time_ms, min_time_ms, is_valid, raw_payload
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -1055,7 +1082,7 @@ async def yetamax_leaderboard_api():
                     s.wrong_count,
                     s.avg_time_ms,
                     s.created_at
-                FROM math_scores s
+                FROM yetamax_scores s
                 JOIN users u ON u.id = s.user_id
                 WHERE s.is_valid = TRUE
                 ORDER BY s.score DESC, s.created_at ASC
@@ -1089,7 +1116,7 @@ async def yetamax_score_distribution():
             cursor.execute(
                 """
                 SELECT FLOOR(score::numeric / %s) AS bucket, COUNT(*)
-                FROM math_scores
+                FROM yetamax_scores
                 WHERE is_valid = TRUE
                 GROUP BY bucket
                 ORDER BY bucket

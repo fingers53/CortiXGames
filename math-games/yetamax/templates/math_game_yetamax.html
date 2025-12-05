@@ -48,7 +48,9 @@
                 <div id="question-text" class="question">Ready?</div>
                 <form id="answer-form" class="answer-form">
                     <input type="number" id="answer-input" autocomplete="off" inputmode="numeric" aria-label="Answer" required />
-                    <button type="submit" class="primary">Submit</button>
+                    <button type="submit" class="primary submit-button" aria-label="Submit answer">
+                        Submit <span aria-hidden="true">↵</span>
+                    </button>
                 </form>
                 <div id="keypad" class="keypad hidden" aria-label="On-screen number pad">
                     <div class="key-row">
@@ -72,7 +74,7 @@
                         <button type="button" data-action="clear">Clear</button>
                     </div>
                     <div class="key-row">
-                        <button type="button" class="primary" data-action="submit">Enter</button>
+                        <button type="button" class="primary" data-action="submit">Submit ↵</button>
                     </div>
                 </div>
                 <div id="feedback" class="feedback" aria-live="polite"></div>

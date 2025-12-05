@@ -31,8 +31,15 @@
         </header>
 
         <section id="intro-panel" class="panel">
-            <p>Press start to begin a 90 second sprint. Answer each question correctly to move on. Wrong answers add to your miss count but you stay on the same question.</p>
-            <button id="start-button" class="primary">Start Round 1</button>
+            <div class="instructions">
+                <p>This game has <strong>two back-to-back 90 second rounds</strong> with a short breather in between:</p>
+                <ul>
+                    <li><strong>Round 1 — Yetamax:</strong> Classic two-digit addition and subtraction, plus multiplication and division using factors 2–12. A new problem appears only after you enter the correct answer.</li>
+                    <li><strong>Round 2 — Maveric:</strong> Harder mixed arithmetic with large integer add/sub, integer/decimal division, decimal multipliers, percent problems, and missing-value equations.</li>
+                </ul>
+                <p>Both rounds use a <strong>30 second shot clock per question</strong>. If the timer hits zero the question auto-skips, counts as a timeout, and you move on. After Round 1 there’s a brief break before Round 2 begins automatically.</p>
+            </div>
+            <button id="start-button" class="primary">Start the two-round sprint</button>
         </section>
 
         <section id="game-panel" class="panel hidden">
@@ -88,7 +95,7 @@
         <section id="midround-panel" class="panel hidden">
             <h2>Round 1 complete</h2>
             <p class="score-line">Get ready for Maveric. Round 2 is about to begin.</p>
-            <div class="countdown" id="round2-countdown">Starting Round 2 in 3...</div>
+            <div class="countdown" id="round2-countdown">Starting Round 2 in 6...</div>
         </section>
 
         <section id="result-panel" class="panel hidden">

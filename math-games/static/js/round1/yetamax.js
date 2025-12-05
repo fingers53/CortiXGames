@@ -624,7 +624,7 @@ function showRound1Summary(payload, response, score) {
     midPanel.classList.remove('hidden');
     gameState = STATE.ROUND1_SUMMARY;
 
-    let countdown = 3;
+    let countdown = 6;
     round2Countdown.textContent = `Starting Round 2 in ${countdown}...`;
     const startRound2 = () => {
         clearInterval(breakInterval);

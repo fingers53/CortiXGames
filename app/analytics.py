@@ -65,12 +65,12 @@ def get_memory_metrics(conn, user_id: int) -> dict:
     }
 
 
-def _math_accuracy(cursor, table: str, user_id: int) -> tuple[float | None, int]:
+def _math_accuracy(cursor, table: str, user_id: int, extra_where: str = "") -> tuple[float | None, int]:
     cursor.execute(
         f"""
         SELECT SUM(correct_count) AS correct, SUM(wrong_count) AS wrong, COUNT(*) AS rows
         FROM {table}
-        WHERE user_id = %s
+        WHERE user_id = %s {extra_where}
         """,
         (user_id,),
     )
@@ -96,36 +96,44 @@ def get_math_metrics(conn, user_id: int) -> dict:
             "SELECT MAX(score) AS best FROM yetamax_scores WHERE user_id = %s",
             (user_id,),
         )
-        yetamax_best = (_fetchone(cursor) or {}).get("best")
+        round1_best = (_fetchone(cursor) or {}).get("best")
 
-        yetamax_accuracy, yetamax_rows = _math_accuracy(cursor, "yetamax_scores", user_id)
+        round1_accuracy, round1_rows = _math_accuracy(cursor, "yetamax_scores", user_id)
         cursor.execute(
             "SELECT AVG(avg_time_ms) AS avg_time_ms FROM yetamax_scores WHERE user_id = %s",
             (user_id,),
         )
-        yetamax_qpm = _math_qpm((_fetchone(cursor) or {}).get("avg_time_ms"))
+        round1_qpm = _math_qpm((_fetchone(cursor) or {}).get("avg_time_ms"))
 
-        cursor.execute(
-            "SELECT MAX(score) AS best FROM maveric_scores WHERE user_id = %s",
-            (user_id,),
-        )
-        maveric_best = (_fetchone(cursor) or {}).get("best")
         cursor.execute(
             "SELECT MAX(score) AS best FROM maveric_scores WHERE user_id = %s AND (round_index = 2 OR round_index IS NULL)",
             (user_id,),
         )
-        maveric_round2_best = (_fetchone(cursor) or {}).get("best")
+        round2_best = (_fetchone(cursor) or {}).get("best")
+        round2_accuracy, round2_rows = _math_accuracy(
+            cursor, "maveric_scores", user_id, "AND (round_index = 2 OR round_index IS NULL)"
+        )
+        cursor.execute(
+            "SELECT AVG(avg_time_ms) AS avg_time_ms FROM maveric_scores WHERE user_id = %s AND (round_index = 2 OR round_index IS NULL)",
+            (user_id,),
+        )
+        round2_qpm = _math_qpm((_fetchone(cursor) or {}).get("avg_time_ms"))
+
         cursor.execute(
             "SELECT MAX(score) AS best FROM maveric_scores WHERE user_id = %s AND round_index = 3",
             (user_id,),
         )
-        maveric_round3_best = (_fetchone(cursor) or {}).get("best")
-        maveric_accuracy, maveric_rows = _math_accuracy(cursor, "maveric_scores", user_id)
+        round3_best = (_fetchone(cursor) or {}).get("best")
+        round3_accuracy, round3_rows = _math_accuracy(cursor, "maveric_scores", user_id, "AND round_index = 3")
         cursor.execute(
-            "SELECT AVG(avg_time_ms) AS avg_time_ms FROM maveric_scores WHERE user_id = %s",
+            "SELECT AVG(avg_time_ms) AS avg_time_ms FROM maveric_scores WHERE user_id = %s AND round_index = 3",
             (user_id,),
         )
-        maveric_qpm = _math_qpm((_fetchone(cursor) or {}).get("avg_time_ms"))
+        round3_qpm = _math_qpm((_fetchone(cursor) or {}).get("avg_time_ms"))
+
+        # Aggregate for totals across all arithmetic rounds
+        yetamax_rows = round1_rows
+        _, maveric_rows = _math_accuracy(cursor, "maveric_scores", user_id)
 
         cursor.execute(
             "SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS questions FROM yetamax_scores WHERE user_id = %s",
@@ -150,14 +158,15 @@ def get_math_metrics(conn, user_id: int) -> dict:
         session_row = _fetchone(cursor) or {"rows": 0, "best": None}
 
     return {
-        "yetamax_best": yetamax_best,
-        "yetamax_accuracy": yetamax_accuracy,
-        "yetamax_qpm": yetamax_qpm,
-        "maveric_best": maveric_best,
-        "maveric_round2_best": maveric_round2_best,
-        "maveric_round3_best": maveric_round3_best,
-        "maveric_accuracy": maveric_accuracy,
-        "maveric_qpm": maveric_qpm,
+        "round1_best": round1_best,
+        "round1_accuracy": round1_accuracy,
+        "round1_qpm": round1_qpm,
+        "round2_best": round2_best,
+        "round2_accuracy": round2_accuracy,
+        "round2_qpm": round2_qpm,
+        "round3_best": round3_best,
+        "round3_accuracy": round3_accuracy,
+        "round3_qpm": round3_qpm,
         "total_questions": total_questions,
         "total_math_sessions": yetamax_rows + maveric_rows + (session_row.get("rows") or 0),
         "session_best_combined": session_row.get("best"),

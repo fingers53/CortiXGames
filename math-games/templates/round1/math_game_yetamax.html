@@ -8,7 +8,7 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/auth.css">
     <link rel="stylesheet" href="/static/styles.css">
-    <link rel="stylesheet" href="/math-games/yetamax/static/css/yetamax.css">
+    <link rel="stylesheet" href="/math-games/static/css/round1/yetamax.css">
 </head>
 <body>
     {% if current_user %}
@@ -48,7 +48,7 @@
             <div class="question-box">
                 <div id="question-text" class="question">Ready?</div>
                 <form id="answer-form" class="answer-form">
-                    <input type="number" id="answer-input" autocomplete="off" inputmode="numeric" aria-label="Answer" required />
+                    <input type="text" id="answer-input" autocomplete="off" inputmode="numeric" aria-label="Answer" required />
                     <button type="submit" class="primary submit-button" aria-label="Submit answer">
                         Submit <span aria-hidden="true">↵</span>
                     </button>
@@ -142,6 +142,6 @@
         </section>
     </div>
 
-    <script src="/math-games/yetamax/static/js/yetamax.js"></script>
+    <script src="/math-games/static/js/round1/yetamax.js"></script>
 </body>
 </html>

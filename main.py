@@ -31,11 +31,11 @@ SESSION_MAX_AGE_LONG = 60 * 60 * 24 * 30      # 30 days
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory=["templates", "math-games/yetamax/templates"])
+templates = Jinja2Templates(directory=["templates", "math-games/templates"])
 app.mount(
-    "/math-games/yetamax/static",
-    StaticFiles(directory="math-games/yetamax/static"),
-    name="yetamax-static",
+    "/math-games/static",
+    StaticFiles(directory="math-games/static"),
+    name="math-games-static",
 )
 
 
@@ -605,7 +605,7 @@ async def memory_game_leaderboard(request: Request, current_user=Depends(get_cur
 
 @app.get("/leaderboard/yetamax", response_class=HTMLResponse)
 async def yetamax_leaderboard_redirect(request: Request, current_user=Depends(get_current_user)):
-    return render_template("yetamax_leaderboard.html", request, {"current_user": current_user})
+    return render_template("round1/yetamax_leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/signup", response_class=HTMLResponse)
@@ -1044,7 +1044,7 @@ async def yetamax_game(request: Request, current_user=Depends(get_current_user))
     if not current_user:
         return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     return render_template(
-        "math_game_yetamax.html",
+        "round1/math_game_yetamax.html",
         request,
         {
             "current_user": current_user,
@@ -1057,7 +1057,7 @@ async def yetamax_leaderboard_page(
     request: Request, current_user=Depends(get_current_user)
 ):
     return render_template(
-        "yetamax_leaderboard.html",
+        "round1/yetamax_leaderboard.html",
         request,
         {
             "current_user": current_user,
@@ -1070,7 +1070,7 @@ async def maveric_leaderboard_page(
     request: Request, current_user=Depends(get_current_user)
 ):
     return render_template(
-        "maveric_leaderboard.html",
+        "round2/maveric_leaderboard.html",
         request,
         {
             "current_user": current_user,
@@ -1081,7 +1081,7 @@ async def maveric_leaderboard_page(
 @app.get("/math-game/yetamax/stats", response_class=HTMLResponse)
 async def yetamax_stats_page(request: Request, current_user=Depends(get_current_user)):
     return render_template(
-        "yetamax_stats.html",
+        "round1/yetamax_stats.html",
         request,
         {
             "current_user": current_user,

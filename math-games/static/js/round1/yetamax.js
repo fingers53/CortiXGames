@@ -587,15 +587,19 @@ function showRound1Summary(payload, response, score) {
 
     let countdown = 3;
     round2Countdown.textContent = `Starting Round 2 in ${countdown}...`;
+    const startRound2 = () => {
+        clearInterval(breakInterval);
+        startRound(STATE.ROUND2);
+    };
     breakInterval = setInterval(() => {
         countdown -= 1;
         if (countdown <= 0) {
-            clearInterval(breakInterval);
-            startRound(STATE.ROUND2);
+            startRound2();
         } else {
             round2Countdown.textContent = `Starting Round 2 in ${countdown}...`;
         }
     }, 1000);
+    setTimeout(startRound2, countdown * 1000 + 200);
 }
 
 function showFinalResults(round2Score, combinedScore, typeBreakdown) {

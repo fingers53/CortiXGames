@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import re
 import secrets
@@ -413,6 +414,14 @@ def validate_answer_record(answer_record: List[Dict]):
             raise HTTPException(status_code=422, detail="Each answer must include correctness")
 
 
+def enforce_range(value: float, minimum: float, maximum: float, label: str):
+    if value is None or not math.isfinite(value) or value < minimum or value > maximum:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{label} must be between {minimum} and {maximum}",
+        )
+
+
 def calculate_yetamax_score(
     correct_count: int, wrong_count: int, avg_time_ms: float, per_questions=None
 ) -> int:
@@ -767,6 +776,11 @@ async def landing_page(request: Request, current_user=Depends(get_current_user))
     return render_template("landing_page.html", request, {"current_user": current_user})
 
 
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_policy(request: Request, current_user=Depends(get_current_user)):
+    return render_template("privacy.html", request, {"current_user": current_user})
+
+
 @app.get("/memory-game", response_class=HTMLResponse)
 async def memory_game(request: Request, current_user=Depends(get_current_user)):
     return render_template("games/memory_game.html", request, {"current_user": current_user})
@@ -947,6 +961,12 @@ async def submit_reaction_score(
     slowest_time_ms = score_result["slowestTime"]
     accuracy = score_result["accuracy"]
 
+    enforce_range(final_score, -5000, 20000, "Final score")
+    enforce_range(average_time_ms, 0, 5000, "Average time")
+    enforce_range(fastest_time_ms, 50, 5000, "Fastest time")
+    enforce_range(slowest_time_ms, 50, 5000, "Slowest time")
+    enforce_range(accuracy, 0, 100, "Accuracy")
+
     conn = get_db_connection()
     try:
         user_id = resolve_user_id(conn, current_user, username, country_code)
@@ -1032,6 +1052,11 @@ async def submit_memory_score(
     r2 = score_result["round2"]
     r3 = score_result["round3"]
     country_code = country_input or get_country_code_from_ip(request.client.host)
+
+    enforce_range(total_score, 0, 200000, "Total score")
+    enforce_range(r1, 0, 80000, "Round 1 score")
+    enforce_range(r2, 0, 80000, "Round 2 score")
+    enforce_range(r3, 0, 80000, "Round 3 score")
 
     conn = get_db_connection()
     try:
@@ -1272,11 +1297,20 @@ async def submit_yetamax_score(
 
     if correct_count < 0 or wrong_count < 0:
         raise HTTPException(status_code=422, detail="Counts must be non-negative")
+    if correct_count > 200 or wrong_count > 200:
+        raise HTTPException(status_code=422, detail="Counts too large")
+    if len(per_question_times) > 400:
+        raise HTTPException(status_code=422, detail="Too many timing entries")
 
     is_valid = not (min_time_ms < 150)
+    enforce_range(avg_time_ms, 0, 10000, "Average time")
+    enforce_range(min_time_ms, 50, 5000, "Minimum time")
+
     score_value = calculate_yetamax_score(
         correct_count, wrong_count, avg_time_ms, per_question_times
     )
+
+    enforce_range(score_value, -2000, 50000, "Score")
 
     raw_payload = data.copy()
     raw_payload.update({"score": score_value, "is_valid": is_valid})
@@ -1354,11 +1388,22 @@ async def _submit_maveric_score(
 
     if correct_count < 0 or wrong_count < 0:
         raise HTTPException(status_code=422, detail="Counts must be non-negative")
+    if correct_count > 200 or wrong_count > 200 or total_questions > 300:
+        raise HTTPException(status_code=422, detail="Counts too large")
+    if (correct_count + wrong_count) and total_questions and total_questions != (correct_count + wrong_count):
+        raise HTTPException(status_code=422, detail="Total questions mismatch")
+    if len(per_question) > 400:
+        raise HTTPException(status_code=422, detail="Too many per-question entries")
 
     is_valid = not (min_time_ms < 150)
+    enforce_range(avg_time_ms, 0, 10000, "Average time")
+    enforce_range(min_time_ms, 50, 5000, "Minimum time")
+
     score_value = calculate_yetamax_score(
         correct_count, wrong_count, avg_time_ms, per_question
     )
+
+    enforce_range(score_value, -2000, 50000, "Score")
 
     raw_payload = data.copy()
     raw_payload.update({"score": score_value, "is_valid": is_valid, "round_index": round_index})
@@ -1443,8 +1488,10 @@ async def submit_math_session(
     round3_score_id = int(data.get("round3_score_id") or 0)
     combined_score = int(data.get("combined_score") or 0)
 
-    if not (round1_score_id and round2_score_id):
+    if not (round1_score_id and round2_score_id and round3_score_id):
         raise HTTPException(status_code=400, detail="Round IDs required")
+    if combined_score < 0 or combined_score > 200000:
+        raise HTTPException(status_code=422, detail="Combined score out of range")
 
     conn = get_db_connection()
     try:

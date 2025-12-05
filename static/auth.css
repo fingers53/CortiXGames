@@ -35,6 +35,23 @@ body {
     text-decoration: underline;
 }
 
+.home-link {
+    color: #111827;
+    text-decoration: none;
+    font-size: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: #e5e7eb;
+}
+
+.home-link:hover {
+    background: #d1d5db;
+}
+
 .auth-separator {
     color: #9CA3AF;
 }

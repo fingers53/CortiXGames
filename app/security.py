@@ -22,7 +22,6 @@ def assert_valid_username(username: str):
 
 
 def hash_password(password: str) -> str:
-    print(f"DEBUG password={repr(password)} len={len(password)} bytes={len(password.encode('utf-8'))}")
     return pwd_context.hash(password)
 
 

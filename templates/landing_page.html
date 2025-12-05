@@ -13,14 +13,11 @@
 </head>
 
 <body data-logged-in="{{ 'true' if current_user else 'false' }}" data-prefill-username="{{ prefill_username or '' }}">
-    {% if current_user %}
+{% if current_user %}
     <div class="auth-bar">
-        <span>Logged in as <strong>{{ current_user.username }}</strong></span>
-        <a href="/profile" class="auth-link">Profile</a>
-        <span class="auth-separator">|</span>
-        <a href="/" class="auth-link">Home</a>
+        <a href="/" class="home-link" aria-label="Home">🏠</a>
     </div>
-    {% endif %}
+{% endif %}
     <div class="container">
         <div class="title">
             <h1>CORTI<span class="emphasize">X</span>Games</h1>
@@ -77,6 +74,10 @@
 
         <div class="auth-note" style="margin-top: 16px;">
             Arithmetic now runs as <strong>three 90-second rounds</strong>: Round 1 warm-up, Round 2 advanced decimals/percents, and Round 3 challenging percent changes and missing equations.
+        </div>
+
+        <div class="auth-note" style="margin-top: 12px;">
+            <a href="/privacy" class="auth-link">Privacy policy</a>
         </div>
 
         <div class="game-grid">

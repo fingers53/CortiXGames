@@ -50,6 +50,8 @@
         autocomplete="current-password"
     />
 
+    <a class="auth-link forgot-link" href="/forgot-password">Forgot password?</a>
+
     <label class="remember-me-label">
         <input
             type="checkbox"
@@ -100,6 +102,10 @@
         localStorage.setItem("username", {{ current_user.username | tojson }});
         {% endif %}
     </script>
+
+    <footer class="site-footer">
+        <p>Questions, bugs, or password reset? Contact the developer: <a href="mailto:cortixgames@gmail.com">cortixgames@gmail.com</a></p>
+    </footer>
 </body>
 
 </html>

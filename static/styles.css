@@ -213,3 +213,26 @@ input:checked + .slider:before {
 .password-button:hover {
     background-color: #1d4ed8;
 }
+
+.forgot-link {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 13px;
+}
+
+.site-footer {
+    margin-top: 32px;
+    padding: 12px 16px;
+    text-align: center;
+    font-size: 13px;
+    color: #4b5563;
+}
+
+.site-footer a {
+    color: #2563eb;
+    text-decoration: none;
+}
+
+.site-footer a:hover {
+    text-decoration: underline;
+}

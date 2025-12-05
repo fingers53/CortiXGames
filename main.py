@@ -781,6 +781,11 @@ async def privacy_policy(request: Request, current_user=Depends(get_current_user
     return render_template("privacy.html", request, {"current_user": current_user})
 
 
+@app.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password(request: Request, current_user=Depends(get_current_user)):
+    return render_template("forgot_password.html", request, {"current_user": current_user})
+
+
 @app.get("/memory-game", response_class=HTMLResponse)
 async def memory_game(request: Request, current_user=Depends(get_current_user)):
     return render_template("games/memory_game.html", request, {"current_user": current_user})

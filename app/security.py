@@ -82,7 +82,16 @@ def get_user_by_id(user_id: int) -> Optional[dict]:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
             cursor.execute(
                 """
-                SELECT id, username, country_code, password_hash, gender, age_range, handedness, is_public, created_at
+                SELECT
+                    id,
+                    username,
+                    country_code,
+                    password_hash,
+                    COALESCE(sex, gender) AS sex,
+                    COALESCE(age_band, age_range) AS age_band,
+                    CASE handedness WHEN 'ambi' THEN 'ambidextrous' ELSE handedness END AS handedness,
+                    is_public,
+                    created_at
                 FROM users WHERE id = %s
                 """,
                 (user_id,),

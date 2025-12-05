@@ -52,6 +52,32 @@ body {
     background: #d1d5db;
 }
 
+.auth-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.status-pill {
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    font-size: 12px;
+}
+
+.status-pill.guest {
+    background: #fff7ed;
+    color: #9a3412;
+}
+
+.status-name {
+    color: #374151;
+    font-weight: 600;
+    font-size: 14px;
+}
+
 .auth-separator {
     color: #9CA3AF;
 }

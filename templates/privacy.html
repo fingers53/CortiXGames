@@ -17,13 +17,22 @@
 <body>
     <div class="auth-bar">
         <a href="/" class="home-link" aria-label="Home">🏠</a>
+        <div class="auth-status">
+            {% if current_user %}
+            <span class="status-pill">Logged in</span>
+            <span class="status-name">{{ current_user.username }}</span>
+            {% else %}
+            <span class="status-pill guest">Guest</span>
+            <span class="status-name">Not signed in</span>
+            {% endif %}
+        </div>
     </div>
     <div class="page">
         <h1>Privacy Policy</h1>
         <div class="card">
             <p>We only collect the information needed to run the games and leaderboards.</p>
             <ul>
-                <li><strong>Account data:</strong> Username, optional password hash, and optional profile fields (country, gender, age range, handedness).</li>
+                <li><strong>Account data:</strong> Username, optional password hash, and optional profile fields (country, sex, age band, handedness, public/private preference).</li>
                 <li><strong>Gameplay data:</strong> Scores, timing metrics, and accuracy for each round of each game.</li>
                 <li><strong>Storage:</strong> Data is stored in our database; we do not sell or share it with third parties.</li>
             </ul>

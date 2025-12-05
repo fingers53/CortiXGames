@@ -6,6 +6,47 @@ import psycopg2.extras
 from app.security import assert_valid_username
 from app.db import get_db_connection
 
+ALLOWED_SEX = {"male", "female", "other", "prefer_not_to_say"}
+ALLOWED_AGE_BANDS = {
+    "18-20",
+    "21-23",
+    "24-26",
+    "27-29",
+    "30-32",
+    "33-35",
+    "36-38",
+    "39-41",
+    "42-44",
+    "45+",
+    "prefer_not_to_say",
+}
+ALLOWED_HANDEDNESS = {"left", "right", "ambidextrous"}
+
+
+def normalize_profile_fields(
+    sex: str | None,
+    age_band: str | None,
+    handedness: str | None,
+    is_public: bool | str | None,
+):
+    sex_normalized = (sex or "prefer_not_to_say").strip()
+    age_normalized = (age_band or "prefer_not_to_say").strip()
+    handedness_normalized = (handedness or "ambidextrous").strip() if handedness else "ambidextrous"
+
+    if sex_normalized not in ALLOWED_SEX:
+        raise ValueError("Invalid sex value")
+    if age_normalized not in ALLOWED_AGE_BANDS:
+        raise ValueError("Invalid age band")
+    if handedness_normalized not in ALLOWED_HANDEDNESS:
+        raise ValueError("Invalid handedness")
+
+    return (
+        sex_normalized,
+        age_normalized,
+        handedness_normalized,
+        bool(is_public) if isinstance(is_public, bool) else str(is_public or "").lower() in {"1", "true", "on"},
+    )
+
 
 def get_or_create_user(conn, username: str, country_code: str | None) -> int:
     assert_valid_username(username)

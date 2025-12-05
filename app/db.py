@@ -158,11 +158,32 @@ def ensure_user_profile_columns():
             cursor.execute(
                 """
                 ALTER TABLE public.users
-                    ADD COLUMN IF NOT EXISTS gender text,
-                    ADD COLUMN IF NOT EXISTS age_range text,
+                    ADD COLUMN IF NOT EXISTS sex text,
+                    ADD COLUMN IF NOT EXISTS age_band text,
                     ADD COLUMN IF NOT EXISTS handedness text,
                     ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT true,
                     ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+                """
+            )
+            cursor.execute(
+                """
+                UPDATE public.users
+                SET sex = COALESCE(sex, CASE gender WHEN 'female' THEN 'female' WHEN 'male' THEN 'male' ELSE 'prefer_not_to_say' END)
+                WHERE (sex IS NULL OR sex = '') AND gender IS NOT NULL;
+                """
+            )
+            cursor.execute(
+                """
+                UPDATE public.users
+                SET handedness = CASE handedness WHEN 'ambi' THEN 'ambidextrous' ELSE handedness END
+                WHERE handedness IS NOT NULL;
+                """
+            )
+            cursor.execute(
+                """
+                UPDATE public.users
+                SET age_band = age_range
+                WHERE (age_band IS NULL OR age_band = '') AND age_range IS NOT NULL;
                 """
             )
         conn.commit()

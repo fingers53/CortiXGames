@@ -12,6 +12,7 @@ from app.analytics import get_profile_metrics
 from app.db import get_db_connection
 from app.dependencies import templates
 from app.security import get_current_user, render_template
+from app.services.users import normalize_profile_fields
 
 router = APIRouter()
 
@@ -20,7 +21,7 @@ def _get_user_by_username(conn, username: str):
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
         cursor.execute(
             """
-            SELECT id, username, country_code, gender, age_range, handedness, is_public, created_at
+            SELECT id, username, country_code, COALESCE(sex, gender) AS sex, COALESCE(age_band, age_range) AS age_band, CASE handedness WHEN 'ambi' THEN 'ambidextrous' ELSE handedness END AS handedness, is_public, created_at
             FROM users
             WHERE username = %s
             """,
@@ -39,7 +40,7 @@ async def profile_page(request: Request, current_user=Depends(get_current_user))
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
             cursor.execute(
                 """
-                SELECT id, username, country_code, gender, age_range, handedness, is_public, created_at
+                SELECT id, username, country_code, COALESCE(sex, gender) AS sex, COALESCE(age_band, age_range) AS age_band, CASE handedness WHEN 'ambi' THEN 'ambidextrous' ELSE handedness END AS handedness, is_public, created_at
                 FROM users WHERE id = %s
                 """,
                 (current_user["id"],),
@@ -71,13 +72,20 @@ async def update_profile(
     request: Request,
     current_user=Depends(get_current_user),
     country_code: str = Form(None),
-    gender: str = Form(None),
-    age_range: str = Form(None),
+    sex: str = Form(None),
+    age_band: str = Form(None),
     handedness: str = Form(None),
     is_public: bool = Form(False),
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        sex_value, age_value, handed_value, is_public_value = normalize_profile_fields(
+            sex, age_band, handedness, is_public
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     conn = get_db_connection()
     try:
@@ -85,15 +93,15 @@ async def update_profile(
             cursor.execute(
                 """
                 UPDATE users
-                SET country_code = %s, gender = %s, age_range = %s, handedness = %s, is_public = %s
+                SET country_code = %s, sex = %s, age_band = %s, handedness = %s, is_public = %s
                 WHERE id = %s
                 """,
                 (
                     (country_code or "??").upper(),
-                    gender,
-                    age_range,
-                    handedness,
-                    bool(is_public),
+                    sex_value,
+                    age_value,
+                    handed_value,
+                    is_public_value,
                     current_user["id"],
                 ),
             )

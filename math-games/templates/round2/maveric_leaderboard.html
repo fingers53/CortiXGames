@@ -22,8 +22,8 @@
     <div class="yetamax-container">
         <header class="yetamax-header">
             <div>
-                <h1>Round 2 Leaderboard</h1>
-                <p class="subtitle">90s advanced mix (decimals and missing percents)</p>
+                <h1 id="page-title">Round 2 Leaderboard</h1>
+                <p class="subtitle" id="page-subtitle">90s advanced mix (decimals and missing percents)</p>
             </div>
             <div class="actions">
                 <a class="link" href="/math-game">Play</a>
@@ -51,9 +51,12 @@
     </div>
 
     <script>
+        const params = new URLSearchParams(window.location.search);
+        const roundIndex = Number(params.get('round') || '2');
+
         async function loadLeaderboard() {
             try {
-                const resp = await fetch('/api/math-game/maveric/leaderboard?round_index=2');
+                const resp = await fetch(`/api/math-game/maveric/leaderboard?round_index=${roundIndex === 3 ? 3 : 2}`);
                 const data = await resp.json();
                 const tbody = document.getElementById('leaderboard-rows');
                 tbody.innerHTML = '';
@@ -77,6 +80,20 @@
                 console.error('Failed to load leaderboard', err);
             }
         }
+
+        function updateHeading() {
+            const title = document.getElementById('page-title');
+            const subtitle = document.getElementById('page-subtitle');
+            if (roundIndex === 3) {
+                title.textContent = 'Round 3 Leaderboard';
+                subtitle.textContent = '90s challenging mix (missing equations and percent changes)';
+            } else {
+                title.textContent = 'Round 2 Leaderboard';
+                subtitle.textContent = '90s advanced mix (decimals and missing percents)';
+            }
+        }
+
+        updateHeading();
         loadLeaderboard();
     </script>
 </body>

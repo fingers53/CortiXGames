@@ -7,24 +7,25 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/auth.css">
     <link rel="stylesheet" href="/static/styles.css">
-    <link rel="stylesheet" href="/math-games/static/css/round1/yetamax.css">
+    <link rel="stylesheet" href="/math-games/static/css/round1/math-rounds.css">
 </head>
 <body>
     <div class="auth-bar">
-        <a href="/" class="home-link" aria-label="Home">🏠</a>
-        <div class="auth-status">
+        <div class="app-brand">
+            <a href="/" class="brand-link">CORTIX <span>Games</span></a>
+        </div>
+        <div class="nav-actions">
+            <a href="/" class="nav-button">Home</a>
             {% if current_user %}
-            <span class="status-pill">Logged in</span>
-            <span class="status-name">{{ current_user.username }}</span>
+            <span class="user-chip">Logged in as <a href="/profile" class="nav-link">{{ current_user.username }}</a></span>
             {% else %}
-            <span class="status-pill guest">Guest</span>
-            <span class="status-name">Not signed in</span>
+            <a class="nav-link" href="/login">Sign in</a>
             {% endif %}
         </div>
     </div>
 
-    <div class="yetamax-container">
-        <header class="yetamax-header">
+    <div class="math-rounds-container">
+        <header class="math-rounds-header">
             <div>
                 <h1 id="page-title">Round 2 Leaderboard</h1>
                 <p class="subtitle" id="page-subtitle">90s advanced mix (decimals and missing percents)</p>

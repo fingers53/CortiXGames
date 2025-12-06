@@ -14,19 +14,21 @@
             margin: 20px;
         }
         .leaderboard-button {
-            padding: 10px 20px;
+            padding: 12px 18px;
             margin: 0 10px;
             cursor: pointer;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            background-color: #f0f0f0;
-            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            font-weight: 700;
             text-decoration: none;
-            color: black;
+            color: #f8fafc;
+            box-shadow: 0 8px 18px rgba(37, 99, 235, 0.35);
+            transition: transform 0.05s ease, box-shadow 0.2s ease;
         }
         .leaderboard-button:hover {
-            background-color: #f4a460;
-            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 10px 22px rgba(37, 99, 235, 0.45);
         }
         .leaderboard-content {
             margin-top: 20px;
@@ -35,14 +37,15 @@
 </head>
 <body>
     <div class="auth-bar">
-        <a href="/" class="home-link" aria-label="Home">🏠</a>
-        <div class="auth-status">
+        <div class="app-brand">
+            <a href="/" class="brand-link">CORTIX <span>Games</span></a>
+        </div>
+        <div class="nav-actions">
+            <a href="/" class="nav-button">Home</a>
             {% if current_user %}
-            <span class="status-pill">Logged in</span>
-            <span class="status-name">{{ current_user.username }}</span>
+            <span class="user-chip">Logged in as <a href="/profile" class="nav-link">{{ current_user.username }}</a></span>
             {% else %}
-            <span class="status-pill guest">Guest</span>
-            <span class="status-name">Not signed in</span>
+            <a class="nav-link" href="/login">Sign in</a>
             {% endif %}
         </div>
     </div>

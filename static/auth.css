@@ -2,6 +2,8 @@
     box-sizing: border-box;
 }
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+
 body {
     margin: 0;
     padding: 0;
@@ -13,73 +15,81 @@ body {
 
 .auth-bar {
     display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    padding: 12px 16px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 18px;
     width: 100%;
     font-size: 14px;
-    color: #1F2933;
+    background: #0f172a;
+    color: #e5e7eb;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.3);
 }
 
-.auth-bar strong {
+.app-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.brand-link {
+    color: #e5e7eb;
+    text-decoration: none;
+    font-size: 16px;
+}
+
+.brand-link span {
+    color: #38bdf8;
+}
+
+.nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.nav-button {
+    padding: 8px 14px;
+    border-radius: 10px;
+    background: #2563eb;
+    color: #f8fafc;
+    text-decoration: none;
     font-weight: 700;
-}
-
-.auth-link {
-    color: #2563EB;
-    text-decoration: none;
-    font-weight: 600;
-}
-
-.auth-link:hover {
-    text-decoration: underline;
-}
-
-.home-link {
-    color: #111827;
-    text-decoration: none;
-    font-size: 18px;
+    border: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    background: #e5e7eb;
+    transition: background-color 0.2s ease, transform 0.05s ease;
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.25);
 }
 
-.home-link:hover {
-    background: #d1d5db;
+.nav-button:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
 }
 
-.auth-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
+.nav-link {
+    color: #cbd5e1;
+    text-decoration: none;
     font-weight: 600;
-    color: #1f2937;
 }
 
-.status-pill {
+.nav-link:hover {
+    color: #f8fafc;
+    text-decoration: underline;
+}
+
+.user-chip {
     padding: 6px 10px;
     border-radius: 999px;
-    background: #e5e7eb;
-    font-size: 12px;
-}
-
-.status-pill.guest {
-    background: #fff7ed;
-    color: #9a3412;
-}
-
-.status-name {
-    color: #374151;
-    font-weight: 600;
-    font-size: 14px;
-}
-
-.auth-separator {
-    color: #9CA3AF;
+    background: rgba(148, 163, 184, 0.2);
+    color: #e2e8f0;
+    font-size: 13px;
 }
 
 .inline-upgrade {
@@ -197,6 +207,22 @@ body {
     background: #fef2f2;
     color: #b91c1c;
     border: 1px solid #fecaca;
+}
+
+@media (max-width: 640px) {
+    .auth-bar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .nav-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .nav-button {
+        width: auto;
+    }
 }
 
 .profile-card h2 {

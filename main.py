@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import re
 import secrets
@@ -24,6 +25,7 @@ from fastapi.templating import Jinja2Templates
 from passlib.context import CryptContext
 
 from scoring import calculate_reaction_game_score
+from app.services.users import normalize_profile_fields
 
 load_dotenv()
 
@@ -144,9 +146,16 @@ def ensure_maveric_scores_table():
                     total_questions INTEGER NOT NULL,
                     is_valid BOOLEAN NOT NULL DEFAULT TRUE,
                     raw_payload JSONB,
+                    round_index INTEGER,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
+                """
+            )
+            cursor.execute(
+                """
+                ALTER TABLE public.maveric_scores
+                    ADD COLUMN IF NOT EXISTS round_index INTEGER;
                 """
             )
             cursor.execute(
@@ -177,9 +186,16 @@ def ensure_math_session_scores_table():
                     user_id INTEGER NOT NULL REFERENCES users(id),
                     round1_score_id INTEGER NOT NULL REFERENCES yetamax_scores(id),
                     round2_score_id INTEGER NOT NULL REFERENCES maveric_scores(id),
+                    round3_score_id INTEGER REFERENCES maveric_scores(id),
                     combined_score INTEGER NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
+                """
+            )
+            cursor.execute(
+                """
+                ALTER TABLE public.math_session_scores
+                    ADD COLUMN IF NOT EXISTS round3_score_id INTEGER REFERENCES maveric_scores(id);
                 """
             )
             cursor.execute(
@@ -290,7 +306,16 @@ def get_user_by_id(conn, user_id: int) -> Optional[dict]:
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
         cursor.execute(
             """
-            SELECT id, username, country_code, password_hash, gender, age_range, handedness, is_public, created_at
+            SELECT
+                id,
+                username,
+                country_code,
+                password_hash,
+                COALESCE(sex, gender) AS sex,
+                COALESCE(age_band, age_range) AS age_band,
+                CASE handedness WHEN 'ambi' THEN 'ambidextrous' ELSE handedness END AS handedness,
+                is_public,
+                created_at
             FROM users WHERE id = %s
             """,
             (user_id,),
@@ -397,6 +422,14 @@ def validate_answer_record(answer_record: List[Dict]):
             raise HTTPException(status_code=422, detail="Reaction times must be between 80 and 5000 ms")
         if item.get("isCorrect") not in (True, False):
             raise HTTPException(status_code=422, detail="Each answer must include correctness")
+
+
+def enforce_range(value: float, minimum: float, maximum: float, label: str):
+    if value is None or not math.isfinite(value) or value < minimum or value > maximum:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{label} must be between {minimum} and {maximum}",
+        )
 
 
 def calculate_yetamax_score(
@@ -753,6 +786,16 @@ async def landing_page(request: Request, current_user=Depends(get_current_user))
     return render_template("landing_page.html", request, {"current_user": current_user})
 
 
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_policy(request: Request, current_user=Depends(get_current_user)):
+    return render_template("privacy.html", request, {"current_user": current_user})
+
+
+@app.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password(request: Request, current_user=Depends(get_current_user)):
+    return render_template("forgot_password.html", request, {"current_user": current_user})
+
+
 @app.get("/memory-game", response_class=HTMLResponse)
 async def memory_game(request: Request, current_user=Depends(get_current_user)):
     return render_template("games/memory_game.html", request, {"current_user": current_user})
@@ -812,6 +855,10 @@ async def signup(
     username: str = Form(...),
     password: str = Form(...),
     remember_me: str | None = Form(None),
+    sex: str | None = Form(None),
+    age_band: str | None = Form(None),
+    handedness: str | None = Form(None),
+    is_public: str | None = Form("1"),
 ):
 
     assert_valid_username(username)
@@ -819,6 +866,13 @@ async def signup(
         return render_landing_error(
             request, "Password must be at least 6 characters long.", username
         )
+
+    try:
+        sex_value, age_value, handed_value, is_public_value = normalize_profile_fields(
+            sex, age_band, handedness, is_public
+        )
+    except ValueError as exc:
+        return render_landing_error(request, str(exc), username)
 
     conn = get_db_connection()
     try:
@@ -842,8 +896,11 @@ async def signup(
 
             password_hash = hash_password(password)
             cursor.execute(
-                "INSERT INTO users (username, country_code, password_hash) VALUES (%s, %s, %s) RETURNING id",
-                (username, "??", password_hash),
+                """
+                INSERT INTO users (username, country_code, password_hash, sex, age_band, handedness, is_public)
+                VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+                """,
+                (username, "??", password_hash, sex_value, age_value, handed_value, is_public_value),
             )
             user_id = cursor.fetchone()[0]
         conn.commit()
@@ -921,7 +978,7 @@ async def submit_reaction_score(
     score_data = data.get("scoreData") or {}
     answer_record = score_data.get("answerRecord") or []
 
-    if not current_user:
+    if not current_user and username:
         assert_valid_username(username)
     validate_answer_record(answer_record)
 
@@ -932,6 +989,21 @@ async def submit_reaction_score(
     fastest_time_ms = score_result["fastestTime"]
     slowest_time_ms = score_result["slowestTime"]
     accuracy = score_result["accuracy"]
+
+    enforce_range(final_score, -5000, 20000, "Final score")
+    enforce_range(average_time_ms, 0, 5000, "Average time")
+    enforce_range(fastest_time_ms, 50, 5000, "Fastest time")
+    enforce_range(slowest_time_ms, 50, 5000, "Slowest time")
+    enforce_range(accuracy, 0, 100, "Accuracy")
+
+    if not current_user:
+        return JSONResponse(
+            content={
+                "status": "success",
+                "scoreResult": score_result,
+                "message": "Login to save your reaction score",
+            }
+        )
 
     conn = get_db_connection()
     try:
@@ -984,7 +1056,7 @@ async def submit_memory_score(
     country_input = data.get("country") or data.get("countryCode")
     question_log = data.get("questionLog") or []
 
-    if not current_user:
+    if not current_user and username:
         assert_valid_username(username)
 
     if not isinstance(question_log, list) or not (1 <= len(question_log) <= 200):
@@ -1013,11 +1085,32 @@ async def submit_memory_score(
             raise HTTPException(status_code=422, detail="Clicks must be objects")
 
     score_result = compute_memory_scores(question_log)
-    total_score = score_result["total"]
-    r1 = score_result["round1"]
-    r2 = score_result["round2"]
-    r3 = score_result["round3"]
+    total_score = max(0, score_result["total"])
+    r1 = max(0, score_result["round1"])
+    r2 = max(0, score_result["round2"])
+    r3 = max(0, score_result["round3"])
     country_code = country_input or get_country_code_from_ip(request.client.host)
+
+    enforce_range(total_score, 0, 200000, "Total score")
+    enforce_range(r1, 0, 80000, "Round 1 score")
+    enforce_range(r2, 0, 80000, "Round 2 score")
+    enforce_range(r3, 0, 80000, "Round 3 score")
+
+    response_payload = {
+        "status": "success",
+        "finalScore": total_score,
+        "round1Score": r1,
+        "round2Score": r2,
+        "round3Score": r3,
+        "nearMisses": score_result["near_misses"],
+        "guessCount": score_result["guess_count"],
+        "avgDurationMs": score_result["avg_duration_ms"],
+        "avgIntervalMs": score_result["avg_interval_ms"],
+    }
+
+    if not current_user:
+        response_payload["message"] = "Login to save your memory score"
+        return JSONResponse(content=response_payload)
 
     conn = get_db_connection()
     try:
@@ -1068,19 +1161,7 @@ async def submit_memory_score(
     finally:
         conn.close()
 
-    return JSONResponse(
-        content={
-            "status": "success",
-            "finalScore": total_score,
-            "round1Score": r1,
-            "round2Score": r2,
-            "round3Score": r3,
-            "nearMisses": score_result["near_misses"],
-            "guessCount": score_result["guess_count"],
-            "avgDurationMs": score_result["avg_duration_ms"],
-            "avgIntervalMs": score_result["avg_interval_ms"],
-        }
-    )
+    return JSONResponse(content=response_payload)
 
 
 @app.get("/api/leaderboard/reaction-game")
@@ -1191,8 +1272,6 @@ async def memory_leaderboard_api():
 @app.get("/math-game", response_class=HTMLResponse)
 @app.get("/math-game/yetamax", response_class=HTMLResponse)
 async def yetamax_game(request: Request, current_user=Depends(get_current_user)):
-    if not current_user:
-        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     return render_template(
         "round1/math_game_yetamax.html",
         request,
@@ -1258,14 +1337,40 @@ async def submit_yetamax_score(
 
     if correct_count < 0 or wrong_count < 0:
         raise HTTPException(status_code=422, detail="Counts must be non-negative")
+    if correct_count > 200 or wrong_count > 200:
+        raise HTTPException(status_code=422, detail="Counts too large")
+    if len(per_question_times) > 400:
+        raise HTTPException(status_code=422, detail="Too many timing entries")
 
     is_valid = not (min_time_ms < 150)
+    enforce_range(avg_time_ms, 0, 10000, "Average time")
+    enforce_range(min_time_ms, 50, 5000, "Minimum time")
+
     score_value = calculate_yetamax_score(
         correct_count, wrong_count, avg_time_ms, per_question_times
     )
 
+    enforce_range(score_value, -2000, 50000, "Score")
+
     raw_payload = data.copy()
     raw_payload.update({"score": score_value, "is_valid": is_valid})
+
+    response_payload = {
+        "status": "success",
+        "score": score_value,
+        "correct_count": correct_count,
+        "wrong_count": wrong_count,
+        "avg_time_ms": avg_time_ms,
+        "min_time_ms": min_time_ms,
+        "is_valid": is_valid,
+        "avg_time_by_operator": avg_time_by_operator,
+        "per_question_times": per_question_times,
+    }
+
+    if not current_user:
+        response_payload["yetamax_score_id"] = None
+        response_payload["message"] = "Login to save your Round 1 score"
+        return JSONResponse(content=response_payload)
 
     conn = get_db_connection()
     try:
@@ -1306,29 +1411,15 @@ async def submit_yetamax_score(
     finally:
         conn.close()
 
-    return JSONResponse(
-        content={
-            "status": "success",
-            "score": score_value,
-            "correct_count": correct_count,
-            "wrong_count": wrong_count,
-            "avg_time_ms": avg_time_ms,
-            "min_time_ms": min_time_ms,
-            "is_valid": is_valid,
-            "yetamax_score_id": new_id,
-            "avg_time_by_operator": avg_time_by_operator,
-            "per_question_times": per_question_times,
-        }
-    )
+    response_payload["yetamax_score_id"] = new_id
+    return JSONResponse(content=response_payload)
 
 
-@app.post("/api/math-game/yetamax/round2/submit")
-async def submit_maveric_score(
-    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+async def _submit_maveric_score(
+    request: Request,
+    current_user,
+    round_index: int,
 ):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Login required")
-
     data = await request.json()
     correct_count = int(data.get("correct_count") or 0)
     wrong_count = int(data.get("wrong_count") or 0)
@@ -1339,14 +1430,38 @@ async def submit_maveric_score(
 
     if correct_count < 0 or wrong_count < 0:
         raise HTTPException(status_code=422, detail="Counts must be non-negative")
+    if correct_count > 200 or wrong_count > 200 or total_questions > 300:
+        raise HTTPException(status_code=422, detail="Counts too large")
+    if (correct_count + wrong_count) and total_questions and total_questions != (correct_count + wrong_count):
+        raise HTTPException(status_code=422, detail="Total questions mismatch")
+    if len(per_question) > 400:
+        raise HTTPException(status_code=422, detail="Too many per-question entries")
 
     is_valid = not (min_time_ms < 150)
+    enforce_range(avg_time_ms, 0, 10000, "Average time")
+    enforce_range(min_time_ms, 50, 5000, "Minimum time")
+
     score_value = calculate_yetamax_score(
         correct_count, wrong_count, avg_time_ms, per_question
     )
 
+    enforce_range(score_value, -2000, 50000, "Score")
+
     raw_payload = data.copy()
-    raw_payload.update({"score": score_value, "is_valid": is_valid})
+    raw_payload.update({"score": score_value, "is_valid": is_valid, "round_index": round_index})
+
+    score_key = "round2_score" if round_index == 2 else "round3_score"
+    response_payload = {
+        "status": "success",
+        score_key: score_value,
+        "is_valid": is_valid,
+        "per_question": per_question,
+    }
+
+    if not current_user:
+        response_payload["maveric_score_id"] = None
+        response_payload["message"] = "Login to save your Round %d score" % round_index
+        return response_payload
 
     conn = get_db_connection()
     try:
@@ -1355,8 +1470,8 @@ async def submit_maveric_score(
                 """
                 INSERT INTO maveric_scores (
                     user_id, score, correct_count, wrong_count,
-                    avg_time_ms, min_time_ms, total_questions, is_valid, raw_payload, updated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    avg_time_ms, min_time_ms, total_questions, is_valid, raw_payload, round_index, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 RETURNING id, created_at
                 """,
                 (
@@ -1369,6 +1484,7 @@ async def submit_maveric_score(
                     total_questions,
                     is_valid,
                     psycopg2.extras.Json(raw_payload),
+                    round_index,
                 ),
             )
             inserted = cursor.fetchone()
@@ -1376,7 +1492,7 @@ async def submit_maveric_score(
         check_and_award_achievements(
             conn,
             current_user["id"],
-            "math_round2",
+            "math_round2" if round_index == 2 else "math_round3",
             {
                 "avg_time_ms": avg_time_ms,
                 "wrong_count": wrong_count,
@@ -1388,31 +1504,49 @@ async def submit_maveric_score(
     finally:
         conn.close()
 
-    return JSONResponse(
-        content={
-            "status": "success",
-            "round2_score": score_value,
-            "is_valid": is_valid,
-            "maveric_score_id": new_id,
-            "per_question": per_question,
-        }
-    )
+    response_payload["maveric_score_id"] = new_id
+    return response_payload
+
+
+@app.post("/api/math-game/yetamax/round2/submit")
+async def submit_maveric_score(
+    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+):
+    response = await _submit_maveric_score(request, current_user, 2)
+    return JSONResponse(content=response)
+
+
+@app.post("/api/math-game/yetamax/round3/submit")
+async def submit_maveric_score_round3(
+    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+):
+    response = await _submit_maveric_score(request, current_user, 3)
+    return JSONResponse(content=response)
 
 
 @app.post("/api/math-game/yetamax/session/submit")
 async def submit_math_session(
     request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
 ):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Login required")
-
     data = await request.json()
     round1_score_id = int(data.get("round1_score_id") or 0)
     round2_score_id = int(data.get("round2_score_id") or 0)
+    round3_score_id = int(data.get("round3_score_id") or 0)
     combined_score = int(data.get("combined_score") or 0)
 
-    if not (round1_score_id and round2_score_id):
+    if not (round1_score_id and round2_score_id and round3_score_id):
         raise HTTPException(status_code=400, detail="Round IDs required")
+    if combined_score < 0 or combined_score > 200000:
+        raise HTTPException(status_code=422, detail="Combined score out of range")
+
+    if not current_user:
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Login to save your math session",
+                "combined_score": combined_score,
+            }
+        )
 
     conn = get_db_connection()
     try:
@@ -1420,14 +1554,15 @@ async def submit_math_session(
             cursor.execute(
                 """
                 INSERT INTO math_session_scores (
-                    user_id, round1_score_id, round2_score_id, combined_score
-                ) VALUES (%s, %s, %s, %s)
+                    user_id, round1_score_id, round2_score_id, round3_score_id, combined_score
+                ) VALUES (%s, %s, %s, %s, %s)
                 RETURNING id, created_at
                 """,
                 (
                     current_user["id"],
                     round1_score_id,
                     round2_score_id,
+                    round3_score_id or None,
                     combined_score,
                 ),
             )
@@ -1486,7 +1621,14 @@ async def yetamax_leaderboard_api():
 
 
 @app.get("/api/math-game/maveric/leaderboard")
-async def maveric_leaderboard_api():
+async def maveric_leaderboard_api(request: Request):
+    round_index_param = request.query_params.get("round_index")
+    round_index = None
+    try:
+        round_index = int(round_index_param) if round_index_param else None
+    except ValueError:
+        round_index = None
+
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
@@ -1502,9 +1644,11 @@ async def maveric_leaderboard_api():
                 FROM maveric_scores s
                 JOIN users u ON u.id = s.user_id
                 WHERE s.is_valid = TRUE
+                  AND (%s IS NULL OR s.round_index = %s OR (s.round_index IS NULL AND %s = 2))
                 ORDER BY s.score DESC, s.created_at ASC
                 LIMIT 20
-                """
+                """,
+                (round_index, round_index, round_index),
             )
             rows = cursor.fetchall()
         scores = []

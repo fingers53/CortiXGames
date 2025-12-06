@@ -30,6 +30,8 @@ let penaltyMessage = "";
 let middleBallShown = false;
 let lockInput = false;
 let sessionToken = null; // Reserved for future secure scoring
+let bounceIntervalId;
+let roundDelayTimeout;
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 const usernameRegex = /^[A-Za-z0-9_]{3,20}$/;
 
@@ -91,6 +93,8 @@ function startGame() {
     document.getElementById('game-container').style.display = 'block';
     middleBallShown = false;
     lockInput = false;
+    clearInterval(countdown);
+    clearTimeout(roundDelayTimeout);
 
     countdown = setInterval(() => {
         if (timer > 0) {
@@ -98,6 +102,7 @@ function startGame() {
             document.getElementById('timer').textContent = timer;
         } else {
             clearInterval(countdown);
+            clearTimeout(roundDelayTimeout);
             showEndScreen();
         }
     }, 1000);
@@ -124,12 +129,19 @@ function resetGame() {
     document.getElementById('game-container').style.display = 'none';
     document.getElementById('end-screen').style.display = 'none';
     clearInterval(countdown);
+    if (bounceIntervalId) {
+        clearInterval(bounceIntervalId);
+    }
     showInstructionBox();
 }
 
 function startNewRound() {
     middleBallShown = false;
     lockInput = false;
+
+    if (roundDelayTimeout) {
+        clearTimeout(roundDelayTimeout);
+    }
 
     const colors = ["red", "blue"];
     const leftColor = colors[Math.floor(Math.random() * 2)];
@@ -146,10 +158,8 @@ function startNewRound() {
     document.getElementById("right-ball").style.visibility = "visible";
     document.getElementById("center-ball").style.visibility = "hidden";
 
-    clearTimeout(countdownInterval);
-
     const delay = Math.random() * (maxDelay - minDelay) + minDelay;
-    countdownInterval = setTimeout(() => {
+    roundDelayTimeout = setTimeout(() => {
         document.getElementById("center-ball").style.visibility = "visible";
         middleBallShown = true;
         questionStartTime = Date.now();
@@ -157,7 +167,7 @@ function startNewRound() {
 }
 
 function chooseSide(side) {
-    if (!middleBallShown || lockInput) return;
+    if (!middleBallShown || lockInput || timer <= 0) return;
 
     const reactionTime = Date.now() - questionStartTime;
     const isCorrect = (side === correctSide);
@@ -210,6 +220,16 @@ function calculateStreaks() {
 }
 
 async function showEndScreen() {
+    middleBallShown = false;
+    lockInput = true;
+    clearInterval(countdown);
+    if (roundDelayTimeout) {
+        clearTimeout(roundDelayTimeout);
+    }
+    if (bounceIntervalId) {
+        clearInterval(bounceIntervalId);
+    }
+
     const scoreData = {
         correctClicks,
         incorrectClicks,
@@ -251,7 +271,10 @@ async function showEndScreen() {
 }
 
 function startBouncing() {
-    setInterval(() => {
+    if (bounceIntervalId) {
+        clearInterval(bounceIntervalId);
+    }
+    bounceIntervalId = setInterval(() => {
         const randomOffsetLeft = Math.floor(Math.random() * 2 * maxJiggle) - maxJiggle;
         const randomOffsetRight = Math.floor(Math.random() * 2 * maxJiggle) - maxJiggle;
 

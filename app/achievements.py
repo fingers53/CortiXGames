@@ -99,14 +99,19 @@ def _total_rounds(cursor, user_id: int) -> int:
 
 
 def _math_question_total(cursor, user_id: int) -> int:
-    total = 0
-    for table in ("math_scores", "yetamax_scores", "maveric_scores"):
-        cursor.execute(
-            f"SELECT COALESCE(SUM(correct_count + wrong_count), 0) FROM {table} WHERE user_id = %s",
-            (user_id,),
-        )
-        total += cursor.fetchone()[0] or 0
-    return total
+    cursor.execute(
+        """
+        SELECT COALESCE(SUM(total_questions), 0) FROM (
+            SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS total_questions FROM math_scores WHERE user_id = %s
+            UNION ALL
+            SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS total_questions FROM yetamax_scores WHERE user_id = %s
+            UNION ALL
+            SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS total_questions FROM maveric_scores WHERE user_id = %s
+        ) AS totals
+        """,
+        (user_id, user_id, user_id),
+    )
+    return cursor.fetchone()[0] or 0
 
 
 def _played_all_games(cursor, user_id: int) -> bool:
@@ -197,7 +202,7 @@ def check_and_award_achievements(conn, user_id: int, game_type: str, score_row: 
             if score_row.get("running_total") and score_row.get("running_total") >= 1000:
                 _award(cursor, user_id, "MEMORY_1K_TOTAL", achievement_map)
 
-        if game_type in {"math_round1", "math_round2", "math"}:
+        if game_type in {"math_round1", "math_round2", "math_round3", "math"}:
             avg_time_ms = score_row.get("avg_time_ms")
             wrong_count = score_row.get("wrong_count") or 0
             correct_count = score_row.get("correct_count") or 0

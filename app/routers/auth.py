@@ -12,7 +12,7 @@ from app.security import (
     set_session_cookie,
     verify_password,
 )
-from app.services.users import get_or_create_user
+from app.services.users import normalize_profile_fields
 from app.db import get_db_connection
 
 router = APIRouter()
@@ -57,10 +57,21 @@ async def signup(
     username: str = Form(...),
     password: str = Form(...),
     remember_me: str | None = Form(None),
+    sex: str | None = Form(None),
+    age_band: str | None = Form(None),
+    handedness: str | None = Form(None),
+    is_public: str | None = Form("1"),
 ):
     assert_valid_username(username)
     if not password or len(password) < 6:
         return render_landing_error(request, "Password must be at least 6 characters long.", username)
+
+    try:
+        sex_value, age_value, handed_value, is_public_value = normalize_profile_fields(
+            sex, age_band, handedness, is_public
+        )
+    except ValueError as exc:
+        return render_landing_error(request, str(exc), username)
 
     conn = get_db_connection()
     try:
@@ -81,8 +92,11 @@ async def signup(
 
             password_hash = hash_password(password)
             cursor.execute(
-                "INSERT INTO users (username, country_code, password_hash) VALUES (%s, %s, %s) RETURNING id",
-                (username, "??", password_hash),
+                """
+                INSERT INTO users (username, country_code, password_hash, sex, age_band, handedness, is_public)
+                VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+                """,
+                (username, "??", password_hash, sex_value, age_value, handed_value, is_public_value),
             )
             user_id = cursor.fetchone()[0]
         conn.commit()

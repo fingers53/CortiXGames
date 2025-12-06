@@ -87,9 +87,16 @@ def ensure_maveric_scores_table():
                     total_questions INTEGER NOT NULL,
                     is_valid BOOLEAN NOT NULL DEFAULT TRUE,
                     raw_payload JSONB,
+                    round_index INTEGER,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
+                """
+            )
+            cursor.execute(
+                """
+                ALTER TABLE public.maveric_scores
+                    ADD COLUMN IF NOT EXISTS round_index INTEGER;
                 """
             )
             cursor.execute(
@@ -120,9 +127,16 @@ def ensure_math_session_scores_table():
                     user_id INTEGER NOT NULL REFERENCES users(id),
                     round1_score_id INTEGER NOT NULL REFERENCES yetamax_scores(id),
                     round2_score_id INTEGER NOT NULL REFERENCES maveric_scores(id),
+                    round3_score_id INTEGER REFERENCES maveric_scores(id),
                     combined_score INTEGER NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
+                """
+            )
+            cursor.execute(
+                """
+                ALTER TABLE public.math_session_scores
+                    ADD COLUMN IF NOT EXISTS round3_score_id INTEGER REFERENCES maveric_scores(id);
                 """
             )
             cursor.execute(
@@ -144,11 +158,32 @@ def ensure_user_profile_columns():
             cursor.execute(
                 """
                 ALTER TABLE public.users
-                    ADD COLUMN IF NOT EXISTS gender text,
-                    ADD COLUMN IF NOT EXISTS age_range text,
+                    ADD COLUMN IF NOT EXISTS sex text,
+                    ADD COLUMN IF NOT EXISTS age_band text,
                     ADD COLUMN IF NOT EXISTS handedness text,
                     ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT true,
                     ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+                """
+            )
+            cursor.execute(
+                """
+                UPDATE public.users
+                SET sex = COALESCE(sex, CASE gender WHEN 'female' THEN 'female' WHEN 'male' THEN 'male' ELSE 'prefer_not_to_say' END)
+                WHERE (sex IS NULL OR sex = '') AND gender IS NOT NULL;
+                """
+            )
+            cursor.execute(
+                """
+                UPDATE public.users
+                SET handedness = CASE handedness WHEN 'ambi' THEN 'ambidextrous' ELSE handedness END
+                WHERE handedness IS NOT NULL;
+                """
+            )
+            cursor.execute(
+                """
+                UPDATE public.users
+                SET age_band = age_range
+                WHERE (age_band IS NULL OR age_band = '') AND age_range IS NOT NULL;
                 """
             )
         conn.commit()

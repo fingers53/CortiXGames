@@ -10,20 +10,24 @@
     <link rel="stylesheet" href="/math-games/static/css/round1/yetamax.css">
 </head>
 <body>
-    {% if current_user %}
     <div class="auth-bar">
-        <span>Logged in as <strong>{{ current_user.username }}</strong></span>
-        <a href="/profile" class="auth-link">Profile</a>
-        <span class="auth-separator">|</span>
-        <a href="/" class="auth-link">Home</a>
+        <a href="/" class="home-link" aria-label="Home">🏠</a>
+        <div class="auth-status">
+            {% if current_user %}
+            <span class="status-pill">Logged in</span>
+            <span class="status-name">{{ current_user.username }}</span>
+            {% else %}
+            <span class="status-pill guest">Guest</span>
+            <span class="status-name">Not signed in</span>
+            {% endif %}
+        </div>
     </div>
-    {% endif %}
 
     <div class="yetamax-container">
         <header class="yetamax-header">
             <div>
-                <h1>Maveric</h1>
-                <p class="subtitle">Round 2 leaderboard (90s advanced mix)</p>
+                <h1 id="page-title">Round 2 Leaderboard</h1>
+                <p class="subtitle" id="page-subtitle">90s advanced mix (decimals and missing percents)</p>
             </div>
             <div class="actions">
                 <a class="link" href="/math-game">Play</a>
@@ -33,7 +37,7 @@
 
         <section class="panel breakdown">
             <h2>Top 20 scores</h2>
-            <table class="leaderboard-table" aria-label="Top Maveric scores">
+            <table class="leaderboard-table" aria-label="Top Round 2 scores">
                 <thead>
                     <tr>
                         <th>Rank</th>
@@ -51,9 +55,12 @@
     </div>
 
     <script>
+        const params = new URLSearchParams(window.location.search);
+        const roundIndex = Number(params.get('round') || '2');
+
         async function loadLeaderboard() {
             try {
-                const resp = await fetch('/api/math-game/maveric/leaderboard');
+                const resp = await fetch(`/api/math-game/maveric/leaderboard?round_index=${roundIndex === 3 ? 3 : 2}`);
                 const data = await resp.json();
                 const tbody = document.getElementById('leaderboard-rows');
                 tbody.innerHTML = '';
@@ -77,6 +84,20 @@
                 console.error('Failed to load leaderboard', err);
             }
         }
+
+        function updateHeading() {
+            const title = document.getElementById('page-title');
+            const subtitle = document.getElementById('page-subtitle');
+            if (roundIndex === 3) {
+                title.textContent = 'Round 3 Leaderboard';
+                subtitle.textContent = '90s challenging mix (missing equations and percent changes)';
+            } else {
+                title.textContent = 'Round 2 Leaderboard';
+                subtitle.textContent = '90s advanced mix (decimals and missing percents)';
+            }
+        }
+
+        updateHeading();
         loadLeaderboard();
     </script>
 </body>

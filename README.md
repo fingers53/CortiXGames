@@ -4,7 +4,7 @@ CortiX Games is a FastAPI + Jinja2 web app backed by Postgres (Supabase-friendly
 
 - **Memory** – grid recall across multiple rounds.
 - **Reaction** – left/right matching with timing stats.
-- **Arithmetic** – a two-round flow (Yetamax then Maveric) with leaderboard, stats, and per-question analytics.
+- **Arithmetic** – a three-round flow (Rounds 1–3) with leaderboard, stats, and per-question analytics.
 
 Authentication uses signed session cookies (username + password), and all scores are persisted to Postgres tables (no SQLite files required).
 

@@ -13,14 +13,18 @@
 </head>
 
 <body data-logged-in="{{ 'true' if current_user else 'false' }}" data-prefill-username="{{ prefill_username or '' }}">
-    {% if current_user %}
     <div class="auth-bar">
-        <span>Logged in as <strong>{{ current_user.username }}</strong></span>
-        <a href="/profile" class="auth-link">Profile</a>
-        <span class="auth-separator">|</span>
-        <a href="/" class="auth-link">Home</a>
+        <a href="/" class="home-link" aria-label="Home">🏠</a>
+        <div class="auth-status">
+            {% if current_user %}
+            <span class="status-pill">Logged in</span>
+            <span class="status-name">{{ current_user.username }}</span>
+            {% else %}
+            <span class="status-pill guest">Guest</span>
+            <span class="status-name">Not signed in</span>
+            {% endif %}
+        </div>
     </div>
-    {% endif %}
     <div class="container">
         <div class="title">
             <h1>CORTI<span class="emphasize">X</span>Games</h1>
@@ -28,6 +32,8 @@
 
         <div class="bottom-buttons">
             <button onclick="location.href='/leaderboard'">Leaderboard</button>
+            <button onclick="location.href='/profile'">My Profile</button>
+            <button onclick="location.href='/math-game/stats'">Stats</button>
             <div class="username-container">
                 <input type="text" id="username" class="username-input" placeholder="Write a username" />
                 <button id="enter-button" onclick="confirmUsername()">Enter</button>
@@ -53,6 +59,48 @@
         autocomplete="current-password"
     />
 
+    <label class="remember-me-label" style="margin-top:8px;">Sex</label>
+    <select name="sex" class="password-input">
+        <option value="prefer_not_to_say">Prefer not to say</option>
+        <option value="female">Female</option>
+        <option value="male">Male</option>
+        <option value="other">Other</option>
+    </select>
+
+    <label class="remember-me-label" style="margin-top:8px;">Age band</label>
+    <select name="age_band" class="password-input">
+        <option value="prefer_not_to_say">Prefer not to say</option>
+        <option value="18-20">18-20</option>
+        <option value="21-23">21-23</option>
+        <option value="24-26">24-26</option>
+        <option value="27-29">27-29</option>
+        <option value="30-32">30-32</option>
+        <option value="33-35">33-35</option>
+        <option value="36-38">36-38</option>
+        <option value="39-41">39-41</option>
+        <option value="42-44">42-44</option>
+        <option value="45+">45+</option>
+    </select>
+
+    <label class="remember-me-label" style="margin-top:8px;">Handedness</label>
+    <select name="handedness" class="password-input">
+        <option value="right">Right</option>
+        <option value="left">Left</option>
+        <option value="ambidextrous">Ambidextrous</option>
+    </select>
+
+    <label class="remember-me-label" style="margin-top:8px; display:flex; align-items:center; gap:8px;">
+        <input
+            type="checkbox"
+            name="is_public"
+            value="1"
+            checked
+        />
+        Make my profile public
+    </label>
+
+    <a class="auth-link forgot-link" href="/forgot-password">Forgot password?</a>
+
     <label class="remember-me-label">
         <input
             type="checkbox"
@@ -75,6 +123,14 @@
             Guest scores stay on this browser. Create a username and password to keep your scores everywhere.
         </div>
 
+        <div class="auth-note" style="margin-top: 16px;">
+            Arithmetic now runs as <strong>three 90-second rounds</strong>: Round 1 warm-up, Round 2 advanced decimals/percents, and Round 3 challenging percent changes and missing equations.
+        </div>
+
+        <div class="auth-note" style="margin-top: 12px;">
+            <a href="/privacy" class="auth-link">Privacy policy</a>
+        </div>
+
         <div class="game-grid">
             <button id="memory-button" class="game-button">Memory</button>
             <button id="reaction-button" class="game-button">React</button>
@@ -95,6 +151,10 @@
         localStorage.setItem("username", {{ current_user.username | tojson }});
         {% endif %}
     </script>
+
+    <footer class="site-footer">
+        <p>Questions, bugs, or password reset? Contact the developer: <a href="mailto:cortixgames@gmail.com">cortixgames@gmail.com</a></p>
+    </footer>
 </body>
 
 </html>

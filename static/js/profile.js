@@ -129,8 +129,9 @@
     ]);
 
     renderCard(document.getElementById("math-card"), "Maths", [
-      { label: "Yetamax best", value: formatNumber(metrics.math.yetamax_best) },
-      { label: "Maveric best", value: formatNumber(metrics.math.maveric_best) },
+      { label: "Round 1 best", value: formatNumber(metrics.math.round1_best) },
+      { label: "Round 2 best", value: formatNumber(metrics.math.round2_best) },
+      { label: "Round 3 best", value: formatNumber(metrics.math.round3_best) },
       { label: "Questions", value: metrics.math.total_questions || 0 },
     ]);
 

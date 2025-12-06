@@ -39,16 +39,16 @@
 </head>
 <body>
     <div class="auth-bar">
-        {% if current_user %}
-            <span>Logged in as <strong>{{ current_user.username }}</strong></span>
-            <a href="/" class="auth-link">Home</a>
-            <span class="auth-separator">|</span>
-            <a href="/logout" class="auth-link">Logout</a>
-        {% else %}
-            <a href="/login" class="auth-link">Log in</a>
-            <span class="auth-separator">|</span>
-            <a href="/signup" class="auth-link">Sign up</a>
-        {% endif %}
+        <a href="/" class="home-link" aria-label="Home">🏠</a>
+        <div class="auth-status">
+            {% if current_user %}
+            <span class="status-pill">Logged in</span>
+            <span class="status-name">{{ current_user.username }}</span>
+            {% else %}
+            <span class="status-pill guest">Guest</span>
+            <span class="status-name">Not signed in</span>
+            {% endif %}
+        </div>
     </div>
 
     <div class="page" id="profile-root" data-username="{{ profile_user.username }}" data-owner="{{ '1' if is_owner else '0' }}">
@@ -63,16 +63,20 @@
                         <div class="value">{{ profile_user.country_code or '??' }}</div>
                     </div>
                     <div>
-                        <div class="label">Gender</div>
-                        <div class="value">{{ profile_user.gender or '—' }}</div>
+                        <div class="label">Sex</div>
+                        <div class="value">{{ profile_user.sex or '—' }}</div>
                     </div>
                     <div>
-                        <div class="label">Age range</div>
-                        <div class="value">{{ profile_user.age_range or '—' }}</div>
+                        <div class="label">Age band</div>
+                        <div class="value">{{ profile_user.age_band or '—' }}</div>
                     </div>
                     <div>
                         <div class="label">Handedness</div>
                         <div class="value">{{ profile_user.handedness or '—' }}</div>
+                    </div>
+                    <div>
+                        <div class="label">Visibility</div>
+                        <div class="value">{{ 'Public' if profile_user.is_public else 'Private' }}</div>
                     </div>
                 </div>
                 {% if is_owner %}
@@ -82,32 +86,36 @@
                         <input type="text" name="country_code" maxlength="2" value="{{ profile_user.country_code or '' }}" placeholder="US">
                     </div>
                     <div>
-                        <div class="label">Gender</div>
-                        <select name="gender">
-                            <option value="" {% if not profile_user.gender %}selected{% endif %}>Prefer not to say</option>
-                            <option value="female" {% if profile_user.gender=='female' %}selected{% endif %}>Female</option>
-                            <option value="male" {% if profile_user.gender=='male' %}selected{% endif %}>Male</option>
+                        <div class="label">Sex</div>
+                        <select name="sex">
+                            <option value="prefer_not_to_say" {% if profile_user.sex=='prefer_not_to_say' or not profile_user.sex %}selected{% endif %}>Prefer not to say</option>
+                            <option value="female" {% if profile_user.sex=='female' %}selected{% endif %}>Female</option>
+                            <option value="male" {% if profile_user.sex=='male' %}selected{% endif %}>Male</option>
+                            <option value="other" {% if profile_user.sex=='other' %}selected{% endif %}>Other</option>
                         </select>
                     </div>
                     <div>
-                        <div class="label">Age range</div>
-                        <select name="age_range">
-                            <option value="" {% if not profile_user.age_range %}selected{% endif %}>Prefer not to say</option>
-                            <option value="under_18" {% if profile_user.age_range=='under_18' %}selected{% endif %}>Under 18</option>
-                            <option value="18_24" {% if profile_user.age_range=='18_24' %}selected{% endif %}>18-24</option>
-                            <option value="25_34" {% if profile_user.age_range=='25_34' %}selected{% endif %}>25-34</option>
-                            <option value="35_44" {% if profile_user.age_range=='35_44' %}selected{% endif %}>35-44</option>
-                            <option value="45_54" {% if profile_user.age_range=='45_54' %}selected{% endif %}>45-54</option>
-                            <option value="55_plus" {% if profile_user.age_range=='55_plus' %}selected{% endif %}>55+</option>
+                        <div class="label">Age band</div>
+                        <select name="age_band">
+                            <option value="prefer_not_to_say" {% if profile_user.age_band=='prefer_not_to_say' or not profile_user.age_band %}selected{% endif %}>Prefer not to say</option>
+                            <option value="18-20" {% if profile_user.age_band=='18-20' %}selected{% endif %}>18-20</option>
+                            <option value="21-23" {% if profile_user.age_band=='21-23' %}selected{% endif %}>21-23</option>
+                            <option value="24-26" {% if profile_user.age_band=='24-26' %}selected{% endif %}>24-26</option>
+                            <option value="27-29" {% if profile_user.age_band=='27-29' %}selected{% endif %}>27-29</option>
+                            <option value="30-32" {% if profile_user.age_band=='30-32' %}selected{% endif %}>30-32</option>
+                            <option value="33-35" {% if profile_user.age_band=='33-35' %}selected{% endif %}>33-35</option>
+                            <option value="36-38" {% if profile_user.age_band=='36-38' %}selected{% endif %}>36-38</option>
+                            <option value="39-41" {% if profile_user.age_band=='39-41' %}selected{% endif %}>39-41</option>
+                            <option value="42-44" {% if profile_user.age_band=='42-44' %}selected{% endif %}>42-44</option>
+                            <option value="45+" {% if profile_user.age_band=='45+' %}selected{% endif %}>45+</option>
                         </select>
                     </div>
                     <div>
                         <div class="label">Handedness</div>
                         <select name="handedness">
-                            <option value="" {% if not profile_user.handedness %}selected{% endif %}>Prefer not to say</option>
                             <option value="right" {% if profile_user.handedness=='right' %}selected{% endif %}>Right-handed</option>
                             <option value="left" {% if profile_user.handedness=='left' %}selected{% endif %}>Left-handed</option>
-                            <option value="ambi" {% if profile_user.handedness=='ambi' %}selected{% endif %}>Ambidextrous</option>
+                            <option value="ambidextrous" {% if profile_user.handedness=='ambidextrous' %}selected{% endif %}>Ambidextrous</option>
                         </select>
                     </div>
                     <div style="display:flex; align-items:center; gap:8px;">
@@ -118,6 +126,7 @@
                         <button type="submit" class="primary">Save profile</button>
                     </div>
                 </form>
+                <p class="subtext" style="margin-top:8px;">Sex, age band, and handedness are used only for aggregated, anonymized statistics and psychometric summaries.</p>
                 {% endif %}
                 <div style="margin-top:14px; display:flex; gap:12px; flex-wrap:wrap;">
                     <button class="share-btn" id="share-btn">Share profile</button>
@@ -135,7 +144,7 @@
 
         <div class="section-title">
             <h3>Game breakdown</h3>
-            <span class="muted">Performance across each mode</span>
+            <span class="muted">Performance across each round</span>
         </div>
         <div class="metrics-grid">
             <div class="card" id="reaction-card"></div>

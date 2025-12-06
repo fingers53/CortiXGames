@@ -8,13 +8,13 @@ def get_db_connection():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
-def ensure_yetamax_scores_table():
+def ensure_math_round1_scores_table():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                CREATE TABLE IF NOT EXISTS yetamax_scores (
+                CREATE TABLE IF NOT EXISTS math_round1_scores (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id),
                     score INTEGER NOT NULL,
@@ -30,14 +30,14 @@ def ensure_yetamax_scores_table():
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_yetamax_scores_score_created_at
-                ON yetamax_scores (score DESC, created_at ASC)
+                CREATE INDEX IF NOT EXISTS idx_math_round1_scores_score_created_at
+                ON math_round1_scores (score DESC, created_at ASC)
                 """
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_yetamax_scores_user_recent
-                ON yetamax_scores (user_id, created_at DESC)
+                CREATE INDEX IF NOT EXISTS idx_math_round1_scores_user_recent
+                ON math_round1_scores (user_id, created_at DESC)
                 """
             )
             cursor.execute(
@@ -51,12 +51,12 @@ def ensure_yetamax_scores_table():
             old_table_exists = cursor.fetchone()[0]
 
             if old_table_exists:
-                cursor.execute("SELECT COUNT(*) FROM yetamax_scores")
+                cursor.execute("SELECT COUNT(*) FROM math_round1_scores")
                 new_count = cursor.fetchone()[0]
                 if new_count == 0:
                     cursor.execute(
                         """
-                        INSERT INTO yetamax_scores (
+                        INSERT INTO math_round1_scores (
                             user_id, score, correct_count, wrong_count,
                             avg_time_ms, min_time_ms, is_valid, raw_payload, created_at
                         )
@@ -70,13 +70,13 @@ def ensure_yetamax_scores_table():
         conn.close()
 
 
-def ensure_maveric_scores_table():
+def ensure_math_round_mixed_scores_table():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                CREATE TABLE IF NOT EXISTS maveric_scores (
+                CREATE TABLE IF NOT EXISTS math_round_mixed_scores (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id),
                     score INTEGER NOT NULL,
@@ -95,20 +95,20 @@ def ensure_maveric_scores_table():
             )
             cursor.execute(
                 """
-                ALTER TABLE public.maveric_scores
+                ALTER TABLE public.math_round_mixed_scores
                     ADD COLUMN IF NOT EXISTS round_index INTEGER;
                 """
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_maveric_scores_score_created_at
-                ON maveric_scores (score DESC, created_at ASC)
+                CREATE INDEX IF NOT EXISTS idx_math_round_mixed_scores_score_created_at
+                ON math_round_mixed_scores (score DESC, created_at ASC)
                 """
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_maveric_scores_user_recent
-                ON maveric_scores (user_id, created_at DESC)
+                CREATE INDEX IF NOT EXISTS idx_math_round_mixed_scores_user_recent
+                ON math_round_mixed_scores (user_id, created_at DESC)
                 """
             )
         conn.commit()
@@ -125,9 +125,9 @@ def ensure_math_session_scores_table():
                 CREATE TABLE IF NOT EXISTS math_session_scores (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id),
-                    round1_score_id INTEGER NOT NULL REFERENCES yetamax_scores(id),
-                    round2_score_id INTEGER NOT NULL REFERENCES maveric_scores(id),
-                    round3_score_id INTEGER REFERENCES maveric_scores(id),
+                    round1_score_id INTEGER NOT NULL REFERENCES math_round1_scores(id),
+                    round2_score_id INTEGER NOT NULL REFERENCES math_round_mixed_scores(id),
+                    round3_score_id INTEGER REFERENCES math_round_mixed_scores(id),
                     combined_score INTEGER NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
@@ -136,7 +136,7 @@ def ensure_math_session_scores_table():
             cursor.execute(
                 """
                 ALTER TABLE public.math_session_scores
-                    ADD COLUMN IF NOT EXISTS round3_score_id INTEGER REFERENCES maveric_scores(id);
+                    ADD COLUMN IF NOT EXISTS round3_score_id INTEGER REFERENCES math_round_mixed_scores(id);
                 """
             )
             cursor.execute(

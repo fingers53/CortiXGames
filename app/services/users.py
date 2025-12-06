@@ -111,15 +111,15 @@ def fetch_recent_attempts(conn, user_id: int) -> list[dict]:
             WHERE user_id = %s
             UNION ALL
             SELECT 'arithmetic_r1' AS game, score AS score, created_at
-            FROM yetamax_scores
+            FROM math_round1_scores
             WHERE user_id = %s
             UNION ALL
             SELECT 'arithmetic_r2' AS game, score AS score, created_at
-            FROM maveric_scores
+            FROM math_round_mixed_scores
             WHERE user_id = %s AND (round_index = 2 OR round_index IS NULL)
             UNION ALL
             SELECT 'arithmetic_r3' AS game, score AS score, created_at
-            FROM maveric_scores
+            FROM math_round_mixed_scores
             WHERE user_id = %s AND round_index = 3
             ORDER BY created_at DESC
             LIMIT 20

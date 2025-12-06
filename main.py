@@ -60,14 +60,14 @@ def get_db_connection():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
-def ensure_yetamax_scores_table():
+def ensure_math_round1_scores_table():
     conn = get_db_connection()
     new_id = None
     try:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                CREATE TABLE IF NOT EXISTS yetamax_scores (
+                CREATE TABLE IF NOT EXISTS math_round1_scores (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id),
                     score INTEGER NOT NULL,
@@ -83,14 +83,14 @@ def ensure_yetamax_scores_table():
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_yetamax_scores_score_created_at
-                ON yetamax_scores (score DESC, created_at ASC)
+                CREATE INDEX IF NOT EXISTS idx_math_round1_scores_score_created_at
+                ON math_round1_scores (score DESC, created_at ASC)
                 """
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_yetamax_scores_user_recent
-                ON yetamax_scores (user_id, created_at DESC)
+                CREATE INDEX IF NOT EXISTS idx_math_round1_scores_user_recent
+                ON math_round1_scores (user_id, created_at DESC)
                 """
             )
 
@@ -106,12 +106,12 @@ def ensure_yetamax_scores_table():
             old_table_exists = cursor.fetchone()[0]
 
             if old_table_exists:
-                cursor.execute("SELECT COUNT(*) FROM yetamax_scores")
+                cursor.execute("SELECT COUNT(*) FROM math_round1_scores")
                 new_count = cursor.fetchone()[0]
                 if new_count == 0:
                     cursor.execute(
                         """
-                        INSERT INTO yetamax_scores (
+                        INSERT INTO math_round1_scores (
                             user_id, score, correct_count, wrong_count,
                             avg_time_ms, min_time_ms, is_valid, raw_payload, created_at
                         )
@@ -125,17 +125,17 @@ def ensure_yetamax_scores_table():
         conn.close()
 
 
-# Ensure Yetamax storage exists on startup
-ensure_yetamax_scores_table()
+# Ensure math round storage exists on startup
+ensure_math_round1_scores_table()
 
 
-def ensure_maveric_scores_table():
+def ensure_math_round_mixed_scores_table():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                CREATE TABLE IF NOT EXISTS maveric_scores (
+                CREATE TABLE IF NOT EXISTS math_round_mixed_scores (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id),
                     score INTEGER NOT NULL,
@@ -154,20 +154,20 @@ def ensure_maveric_scores_table():
             )
             cursor.execute(
                 """
-                ALTER TABLE public.maveric_scores
+                ALTER TABLE public.math_round_mixed_scores
                     ADD COLUMN IF NOT EXISTS round_index INTEGER;
                 """
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_maveric_scores_score_created_at
-                ON maveric_scores (score DESC, created_at ASC)
+                CREATE INDEX IF NOT EXISTS idx_math_round_mixed_scores_score_created_at
+                ON math_round_mixed_scores (score DESC, created_at ASC)
                 """
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_maveric_scores_user_recent
-                ON maveric_scores (user_id, created_at DESC)
+                CREATE INDEX IF NOT EXISTS idx_math_round_mixed_scores_user_recent
+                ON math_round_mixed_scores (user_id, created_at DESC)
                 """
             )
         conn.commit()
@@ -184,9 +184,9 @@ def ensure_math_session_scores_table():
                 CREATE TABLE IF NOT EXISTS math_session_scores (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id),
-                    round1_score_id INTEGER NOT NULL REFERENCES yetamax_scores(id),
-                    round2_score_id INTEGER NOT NULL REFERENCES maveric_scores(id),
-                    round3_score_id INTEGER REFERENCES maveric_scores(id),
+                    round1_score_id INTEGER NOT NULL REFERENCES math_round1_scores(id),
+                    round2_score_id INTEGER NOT NULL REFERENCES math_round_mixed_scores(id),
+                    round3_score_id INTEGER REFERENCES math_round_mixed_scores(id),
                     combined_score INTEGER NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
@@ -195,7 +195,7 @@ def ensure_math_session_scores_table():
             cursor.execute(
                 """
                 ALTER TABLE public.math_session_scores
-                    ADD COLUMN IF NOT EXISTS round3_score_id INTEGER REFERENCES maveric_scores(id);
+                    ADD COLUMN IF NOT EXISTS round3_score_id INTEGER REFERENCES math_round_mixed_scores(id);
                 """
             )
             cursor.execute(
@@ -210,7 +210,7 @@ def ensure_math_session_scores_table():
 
 
 # Ensure Round 2 and combined storage exist on startup
-ensure_maveric_scores_table()
+ensure_math_round_mixed_scores_table()
 ensure_math_session_scores_table()
 ensure_user_profile_columns()
 ensure_memory_score_payload_column()
@@ -570,11 +570,11 @@ def fetch_recent_attempts(conn, user_id: int) -> List[dict]:
             WHERE user_id = %s
             UNION ALL
             SELECT 'arithmetic_r1' AS game, score AS score, created_at
-            FROM yetamax_scores
+            FROM math_round1_scores
             WHERE user_id = %s
             UNION ALL
             SELECT 'arithmetic_r2' AS game, score AS score, created_at
-            FROM maveric_scores
+            FROM math_round_mixed_scores
             WHERE user_id = %s
             ORDER BY created_at DESC
             LIMIT 20
@@ -735,25 +735,25 @@ def summarize_math_times(rows: list, question_key: str) -> tuple[dict, float]:
 def fetch_math_insights(conn, user_id: int) -> dict:
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
         cursor.execute(
-            "SELECT raw_payload, score FROM yetamax_scores WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
+            "SELECT raw_payload, score FROM math_round1_scores WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
             (user_id,),
         )
         round1_rows = cursor.fetchall()
 
         cursor.execute(
-            "SELECT raw_payload, score FROM maveric_scores WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
+            "SELECT raw_payload, score FROM math_round_mixed_scores WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
             (user_id,),
         )
         round2_rows = cursor.fetchall()
 
         cursor.execute(
-            "SELECT MAX(score) FROM yetamax_scores WHERE user_id = %s",
+            "SELECT MAX(score) FROM math_round1_scores WHERE user_id = %s",
             (user_id,),
         )
         best_r1 = cursor.fetchone()[0]
 
         cursor.execute(
-            "SELECT MAX(score) FROM maveric_scores WHERE user_id = %s",
+            "SELECT MAX(score) FROM math_round_mixed_scores WHERE user_id = %s",
             (user_id,),
         )
         best_r2 = cursor.fetchone()[0]
@@ -1320,10 +1320,7 @@ async def maveric_leaderboard_page(
     )
 
 
-@app.post("/api/math-game/yetamax/submit")
-async def submit_yetamax_score(
-    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
-):
+async def save_round1_score(request: Request, current_user):
     if not current_user:
         raise HTTPException(status_code=401, detail="Login required")
 
@@ -1377,7 +1374,7 @@ async def submit_yetamax_score(
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO yetamax_scores (
+                INSERT INTO math_round1_scores (
                     user_id, score, correct_count, wrong_count,
                     avg_time_ms, min_time_ms, is_valid, raw_payload
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -1415,7 +1412,14 @@ async def submit_yetamax_score(
     return JSONResponse(content=response_payload)
 
 
-async def _submit_maveric_score(
+@app.post("/api/math-game/yetamax/submit")
+async def submit_round1_score(
+    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+):
+    return await save_round1_score(request, current_user)
+
+
+async def _save_round_mixed_score(
     request: Request,
     current_user,
     round_index: int,
@@ -1448,6 +1452,7 @@ async def _submit_maveric_score(
     enforce_range(score_value, -2000, 50000, "Score")
 
     raw_payload = data.copy()
+    # Persist which mixed round this score represents (2 = harder, 3 = easier)
     raw_payload.update({"score": score_value, "is_valid": is_valid, "round_index": round_index})
 
     score_key = "round2_score" if round_index == 2 else "round3_score"
@@ -1468,7 +1473,7 @@ async def _submit_maveric_score(
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO maveric_scores (
+                INSERT INTO math_round_mixed_scores (
                     user_id, score, correct_count, wrong_count,
                     avg_time_ms, min_time_ms, total_questions, is_valid, raw_payload, round_index, updated_at
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
@@ -1508,11 +1513,19 @@ async def _submit_maveric_score(
     return response_payload
 
 
+async def save_round2_score(request: Request, current_user):
+    return await _save_round_mixed_score(request, current_user, 2)
+
+
+async def save_round3_score(request: Request, current_user):
+    return await _save_round_mixed_score(request, current_user, 3)
+
+
 @app.post("/api/math-game/yetamax/round2/submit")
 async def submit_maveric_score(
     request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
 ):
-    response = await _submit_maveric_score(request, current_user, 2)
+    response = await save_round2_score(request, current_user)
     return JSONResponse(content=response)
 
 
@@ -1520,7 +1533,7 @@ async def submit_maveric_score(
 async def submit_maveric_score_round3(
     request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
 ):
-    response = await _submit_maveric_score(request, current_user, 3)
+    response = await save_round3_score(request, current_user)
     return JSONResponse(content=response)
 
 
@@ -1595,7 +1608,7 @@ async def yetamax_leaderboard_api():
                     s.wrong_count,
                     s.avg_time_ms,
                     s.created_at
-                FROM yetamax_scores s
+                FROM math_round1_scores s
                 JOIN users u ON u.id = s.user_id
                 WHERE s.is_valid = TRUE
                 ORDER BY s.score DESC, s.created_at ASC
@@ -1641,7 +1654,7 @@ async def maveric_leaderboard_api(request: Request):
                     s.wrong_count,
                     s.avg_time_ms,
                     s.created_at
-                FROM maveric_scores s
+                FROM math_round_mixed_scores s
                 JOIN users u ON u.id = s.user_id
                 WHERE s.is_valid = TRUE
                   AND (%s IS NULL OR s.round_index = %s OR (s.round_index IS NULL AND %s = 2))
@@ -1677,7 +1690,7 @@ async def yetamax_score_distribution():
             cursor.execute(
                 """
                 SELECT FLOOR(score::numeric / %s) AS bucket, COUNT(*)
-                FROM yetamax_scores
+                FROM math_round1_scores
                 WHERE is_valid = TRUE
                 GROUP BY bucket
                 ORDER BY bucket
@@ -1733,8 +1746,8 @@ async def my_best_scores(username: str):
             cursor.execute(
                 """
                 SELECT GREATEST(
-                    COALESCE((SELECT MAX(score) FROM yetamax_scores WHERE user_id = %s), 0),
-                    COALESCE((SELECT MAX(score) FROM maveric_scores WHERE user_id = %s), 0),
+                    COALESCE((SELECT MAX(score) FROM math_round1_scores WHERE user_id = %s), 0),
+                    COALESCE((SELECT MAX(score) FROM math_round_mixed_scores WHERE user_id = %s), 0),
                     COALESCE((SELECT MAX(score) FROM math_scores WHERE user_id = %s), 0),
                     COALESCE((SELECT MAX(combined_score) FROM math_session_scores WHERE user_id = %s), 0)
                 )

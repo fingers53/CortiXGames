@@ -6,10 +6,10 @@ from .achievements import seed_achievements
 from .db import (
     ensure_achievements_tables,
     ensure_math_session_scores_table,
-    ensure_maveric_scores_table,
+    ensure_math_round_mixed_scores_table,
     ensure_memory_score_payload_column,
     ensure_user_profile_columns,
-    ensure_yetamax_scores_table,
+    ensure_math_round1_scores_table,
 )
 from .dependencies import templates
 from .routers import api_scores, auth, math_routes, pages, profile
@@ -21,8 +21,8 @@ def create_app() -> FastAPI:
     app.mount("/math-games/static", StaticFiles(directory=str(MATH_STATIC_DIR)), name="math-games-static")
 
     ensure_user_profile_columns()
-    ensure_yetamax_scores_table()
-    ensure_maveric_scores_table()
+    ensure_math_round1_scores_table()
+    ensure_math_round_mixed_scores_table()
     ensure_math_session_scores_table()
     ensure_memory_score_payload_column()
     ensure_achievements_tables()

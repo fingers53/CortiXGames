@@ -823,7 +823,7 @@ async def memory_game_leaderboard(request: Request, current_user=Depends(get_cur
 
 @app.get("/leaderboard/yetamax", response_class=HTMLResponse)
 async def yetamax_leaderboard_redirect(request: Request, current_user=Depends(get_current_user)):
-    return render_template("round1/yetamax_leaderboard.html", request, {"current_user": current_user})
+    return render_template("round1/math_round1_leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/signup", response_class=HTMLResponse)
@@ -1273,7 +1273,7 @@ async def memory_leaderboard_api():
 @app.get("/math-game/yetamax", response_class=HTMLResponse)
 async def yetamax_game(request: Request, current_user=Depends(get_current_user)):
     return render_template(
-        "round1/math_game_yetamax.html",
+        "round1/math_rounds_game.html",
         request,
         {
             "current_user": current_user,
@@ -1287,7 +1287,7 @@ async def yetamax_leaderboard_page(
     request: Request, current_user=Depends(get_current_user)
 ):
     return render_template(
-        "round1/yetamax_leaderboard.html",
+        "round1/math_round1_leaderboard.html",
         request,
         {
             "current_user": current_user,
@@ -1299,7 +1299,7 @@ async def yetamax_leaderboard_page(
 @app.get("/math-game/yetamax/stats", response_class=HTMLResponse)
 async def yetamax_stats_page(request: Request, current_user=Depends(get_current_user)):
     return render_template(
-        "round1/yetamax_stats.html",
+        "round1/math_round1_stats.html",
         request,
         {
             "current_user": current_user,
@@ -1311,8 +1311,14 @@ async def yetamax_stats_page(request: Request, current_user=Depends(get_current_
 async def maveric_leaderboard_page(
     request: Request, current_user=Depends(get_current_user)
 ):
+    round_param = request.query_params.get("round")
+    template_name = (
+        "round3/math_round3_leaderboard.html"
+        if round_param == "3"
+        else "round2/math_round2_leaderboard.html"
+    )
     return render_template(
-        "round2/maveric_leaderboard.html",
+        template_name,
         request,
         {
             "current_user": current_user,

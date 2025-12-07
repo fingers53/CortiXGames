@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CortiX Games</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/auth.css">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/math-games/static/css/round1/math-rounds.css">
+</head>
+<body>
+    <div class="auth-bar">
+        <div class="app-brand">
+            <a href="/" class="brand-link">CORTIX <span>Games</span></a>
+        </div>
+        <div class="nav-actions">
+            <a href="/" class="nav-button">Home</a>
+            {% if current_user %}
+            <span class="user-chip">Logged in as <a href="/profile" class="nav-link">{{ current_user.username }}</a></span>
+            {% else %}
+            <a class="nav-link" href="/login">Sign in</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="math-rounds-container">
+        <header class="math-rounds-header">
+            <div>
+                <h1 id="page-title">Round 2 Leaderboard</h1>
+                <p class="subtitle" id="page-subtitle">90s advanced mix (decimals and missing percents)</p>
+            </div>
+            <div class="actions">
+                <a class="link" href="/math-game">Play</a>
+                <a class="link" href="/math-game/leaderboard">Arithmetic Leaderboard</a>
+            </div>
+        </header>
+
+        <section class="panel breakdown">
+            <h2>Top 20 scores</h2>
+            <table class="leaderboard-table" aria-label="Top Round 2 scores">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Username</th>
+                        <th>Score</th>
+                        <th>Correct</th>
+                        <th>Wrong</th>
+                        <th>Avg time (ms)</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-rows"></tbody>
+            </table>
+        </section>
+    </div>
+
+    <script>
+        async function loadLeaderboard() {
+            try {
+                const resp = await fetch(`/api/math-game/maveric/leaderboard?round_index=2`);
+                const data = await resp.json();
+                const tbody = document.getElementById('leaderboard-rows');
+                tbody.innerHTML = '';
+                (data.scores || []).forEach((row, idx) => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${idx + 1}</td>
+                        <td>${row.username}</td>
+                        <td>${row.score}</td>
+                        <td>${row.correct_count}</td>
+                        <td>${row.wrong_count}</td>
+                        <td>${row.avg_time_ms.toFixed(1)}</td>
+                        <td>${new Date(row.created_at).toLocaleString()}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                if (!data.scores || data.scores.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7">No scores yet.</td></tr>';
+                }
+            } catch (err) {
+                console.error('Failed to load leaderboard', err);
+            }
+        }
+        loadLeaderboard();
+    </script>
+</body>
+</html>

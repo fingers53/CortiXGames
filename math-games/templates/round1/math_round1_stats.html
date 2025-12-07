@@ -11,15 +11,14 @@
 </head>
 <body>
     <div class="auth-bar">
-        <div class="app-brand">
-            <a href="/" class="brand-link">CORTIX <span>Games</span></a>
-        </div>
-        <div class="nav-actions">
-            <a href="/" class="nav-button">Home</a>
+        <a href="/" class="home-link" aria-label="Home">🏠</a>
+        <div class="auth-status">
             {% if current_user %}
-            <span class="user-chip">Logged in as <a href="/profile" class="nav-link">{{ current_user.username }}</a></span>
+            <span class="status-pill">Logged in</span>
+            <span class="status-name">{{ current_user.username }}</span>
             {% else %}
-            <a class="nav-link" href="/login">Sign in</a>
+            <span class="status-pill guest">Guest</span>
+            <span class="status-name">Not signed in</span>
             {% endif %}
         </div>
     </div>
@@ -45,6 +44,12 @@
             <h2>Difficulty snapshot</h2>
             <p class="muted" id="difficulty-note">Loading question difficulty…</p>
             <div class="difficulty-grid" id="difficulty-grid"></div>
+        </section>
+
+        <section class="panel">
+            <h2>Performance by profile attributes</h2>
+            <p class="muted">Average correct answers (per run) and reaction speed grouped by age band, sex, and handedness.</p>
+            <div class="attribute-grid" id="attribute-panels"></div>
         </section>
     </div>
 
@@ -117,6 +122,99 @@
             renderSection('Easiest', easiest);
         }
 
+        function formatMetric(value, suffix = '') {
+            if (value === null || value === undefined || Number.isNaN(value)) return '—';
+            return `${Number(value).toFixed(1)}${suffix}`;
+        }
+
+        function renderAttributeBreakdown(dataset) {
+            const container = document.getElementById('attribute-panels');
+            if (!container) return;
+            container.innerHTML = '';
+            if (!dataset) {
+                container.textContent = 'No attribute data available yet.';
+                return;
+            }
+
+            const attributeLabels = {
+                age_band: 'Age band',
+                sex: 'Sex',
+                handedness: 'Handedness',
+            };
+
+            Object.entries(attributeLabels).forEach(([key, label]) => {
+                const data = dataset[key];
+                if (!data) return;
+                const card = document.createElement('div');
+                card.className = 'panel attribute-card';
+
+                const rowsByLabel = new Map();
+                const addValues = (list, field, sampleField, averageField) => {
+                    (list || []).forEach((entry) => {
+                        const row = rowsByLabel.get(entry.label) || { label: entry.label };
+                        row[field] = entry[averageField];
+                        row[sampleField] = entry.samples;
+                        rowsByLabel.set(entry.label, row);
+                    });
+                };
+
+                addValues(data.math_round1, 'round1', 'round1_samples', 'avg_correct');
+                addValues(data.math_round2, 'round2', 'round2_samples', 'avg_correct');
+                addValues(data.math_round3, 'round3', 'round3_samples', 'avg_correct');
+                addValues(data.reaction, 'reaction_ms', 'reaction_samples', 'avg_reaction_ms');
+
+                const labelsList = Array.from(rowsByLabel.values()).sort((a, b) => {
+                    if (!a.label) return -1;
+                    if (!b.label) return 1;
+                    return a.label.localeCompare(b.label);
+                });
+
+                card.innerHTML = `
+                    <h3>${label}</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Group</th>
+                                <th>Round 1 avg correct</th>
+                                <th>Round 2 avg correct</th>
+                                <th>Round 3 avg correct</th>
+                                <th>Avg reaction (ms)</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                `;
+
+                const tbody = card.querySelector('tbody');
+                labelsList.forEach((entry) => {
+                    const round1 = entry.round1 !== undefined
+                        ? `${formatMetric(entry.round1)} (n=${entry.round1_samples || 0})`
+                        : '—';
+                    const round2 = entry.round2 !== undefined
+                        ? `${formatMetric(entry.round2)} (n=${entry.round2_samples || 0})`
+                        : '—';
+                    const round3 = entry.round3 !== undefined
+                        ? `${formatMetric(entry.round3)} (n=${entry.round3_samples || 0})`
+                        : '—';
+                    const reaction = entry.reaction_ms !== undefined
+                        ? `${formatMetric(entry.reaction_ms)} (n=${entry.reaction_samples || 0})`
+                        : '—';
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${entry.label || 'Unknown'}</td>
+                        <td>${round1}</td>
+                        <td>${round2}</td>
+                        <td>${round3}</td>
+                        <td>${reaction}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                container.appendChild(card);
+            });
+        }
+
         fetch('/api/math-game/yetamax/score-distribution')
             .then((resp) => resp.json())
             .then((data) => renderHistogram(data.buckets || []))
@@ -131,6 +229,15 @@
             .catch(() => {
                 const note = document.getElementById('difficulty-note');
                 note.textContent = 'Could not load difficulty data.';
+            });
+
+        fetch('/api/stats/profile-breakdown')
+            .then((resp) => resp.json())
+            .then((data) => renderAttributeBreakdown(data))
+            .catch((err) => {
+                console.error('Failed to load attribute breakdown', err);
+                const container = document.getElementById('attribute-panels');
+                container.textContent = 'Unable to load attribute breakdown.';
             });
     </script>
 </body>

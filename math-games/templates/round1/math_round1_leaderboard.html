@@ -91,6 +91,10 @@
                 }
                 body.innerHTML = '';
                 scores.forEach((row, idx) => {
+                    const timedOut = (row.correct_count || 0) + (row.wrong_count || 0) === 0;
+                    const avgTime = Number.isFinite(row.avg_time_ms) && !timedOut
+                        ? (Number(row.avg_time_ms) / 1000).toFixed(2)
+                        : 'All questions timed out';
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${idx + 1}</td>
@@ -98,7 +102,7 @@
                         <td>${row.score}</td>
                         <td>${row.correct_count}</td>
                         <td>${row.wrong_count}</td>
-                        <td>${(Number(row.avg_time_ms) / 1000).toFixed(2)}</td>
+                        <td>${avgTime}</td>
                         <td>${new Date(row.created_at).toLocaleString()}</td>
                     `;
                     body.appendChild(tr);

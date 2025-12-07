@@ -63,6 +63,10 @@
                 const tbody = document.getElementById('leaderboard-rows');
                 tbody.innerHTML = '';
                 (data.scores || []).forEach((row, idx) => {
+                    const timedOut = (row.correct_count || 0) + (row.wrong_count || 0) === 0;
+                    const avgTime = Number.isFinite(row.avg_time_ms) && !timedOut
+                        ? `${row.avg_time_ms.toFixed(1)}`
+                        : 'All questions timed out';
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${idx + 1}</td>
@@ -70,7 +74,7 @@
                         <td>${row.score}</td>
                         <td>${row.correct_count}</td>
                         <td>${row.wrong_count}</td>
-                        <td>${row.avg_time_ms.toFixed(1)}</td>
+                        <td>${avgTime}</td>
                         <td>${new Date(row.created_at).toLocaleString()}</td>
                     `;
                     tbody.appendChild(tr);

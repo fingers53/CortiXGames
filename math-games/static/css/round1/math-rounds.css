@@ -164,6 +164,29 @@ body {
     text-align: left;
 }
 
+.attribute-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.attribute-card table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+}
+
+.attribute-card th,
+.attribute-card td {
+    padding: 8px;
+    border-bottom: 1px solid rgba(13, 223, 107, 0.2);
+}
+
+.attribute-card th {
+    font-weight: 700;
+    color: #7cffc4;
+}
+
 .instructions {
     background: rgba(1, 7, 1, 0.9);
     border: 1px solid rgba(13, 223, 107, 0.35);

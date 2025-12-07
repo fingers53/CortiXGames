@@ -1624,13 +1624,14 @@ async def yetamax_leaderboard_api():
             rows = cursor.fetchall()
         scores = []
         for row in rows:
+            avg_time_raw = row.get("avg_time_ms") if isinstance(row, dict) else row["avg_time_ms"]
             scores.append(
                 {
                     "username": row["username"],
                     "score": int(row["score"]),
                     "correct_count": int(row["correct_count"]),
                     "wrong_count": int(row["wrong_count"]),
-                    "avg_time_ms": float(row["avg_time_ms"]),
+                    "avg_time_ms": float(avg_time_raw) if avg_time_raw is not None else None,
                     "created_at": row["created_at"].isoformat(),
                 }
             )
@@ -1672,13 +1673,14 @@ async def maveric_leaderboard_api(request: Request):
             rows = cursor.fetchall()
         scores = []
         for row in rows:
+            avg_time_raw = row.get("avg_time_ms") if isinstance(row, dict) else row["avg_time_ms"]
             scores.append(
                 {
                     "username": row["username"],
                     "score": int(row["score"]),
                     "correct_count": int(row["correct_count"]),
                     "wrong_count": int(row["wrong_count"]),
-                    "avg_time_ms": float(row["avg_time_ms"]),
+                    "avg_time_ms": float(avg_time_raw) if avg_time_raw is not None else None,
                     "created_at": row["created_at"].isoformat(),
                 }
             )
@@ -1717,6 +1719,83 @@ async def yetamax_score_distribution():
 @app.get("/api/math-game/yetamax/difficulty-summary")
 async def yetamax_difficulty_summary():
     return JSONResponse(content={"hardest_questions": [], "easiest_questions": []})
+
+
+def _attribute_label_expr(attr: str) -> str:
+    if attr == "age_band":
+        return "COALESCE(NULLIF(u.age_band, ''), NULLIF(u.age_range, ''), 'Unknown')"
+    if attr == "sex":
+        return "COALESCE(NULLIF(u.sex, ''), NULLIF(u.gender, ''), 'Unknown')"
+    return "COALESCE(NULLIF(u.handedness, ''), 'Unknown')"
+
+
+@app.get("/api/stats/profile-breakdown")
+async def profile_attribute_breakdown():
+    conn = get_db_connection()
+    attr_keys = ("age_band", "sex", "handedness")
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+            response = {}
+            for attr in attr_keys:
+                expr = _attribute_label_expr(attr)
+
+                cursor.execute(
+                    f"""
+                    SELECT {expr} AS label, AVG(s.correct_count) AS avg_correct, COUNT(*) AS samples
+                    FROM math_round1_scores s
+                    JOIN users u ON u.id = s.user_id
+                    WHERE s.is_valid = TRUE
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                round1_rows = [dict(row) for row in cursor.fetchall()]
+
+                cursor.execute(
+                    f"""
+                    SELECT {expr} AS label, AVG(s.correct_count) AS avg_correct, COUNT(*) AS samples
+                    FROM math_round_mixed_scores s
+                    JOIN users u ON u.id = s.user_id
+                    WHERE s.is_valid = TRUE AND (s.round_index = 2 OR s.round_index IS NULL)
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                round2_rows = [dict(row) for row in cursor.fetchall()]
+
+                cursor.execute(
+                    f"""
+                    SELECT {expr} AS label, AVG(s.correct_count) AS avg_correct, COUNT(*) AS samples
+                    FROM math_round_mixed_scores s
+                    JOIN users u ON u.id = s.user_id
+                    WHERE s.is_valid = TRUE AND s.round_index = 3
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                round3_rows = [dict(row) for row in cursor.fetchall()]
+
+                cursor.execute(
+                    f"""
+                    SELECT {expr} AS label, AVG(r.average_time_ms) AS avg_reaction_ms, COUNT(*) AS samples
+                    FROM reaction_scores r
+                    JOIN users u ON u.id = r.user_id
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                reaction_rows = [dict(row) for row in cursor.fetchall()]
+
+                response[attr] = {
+                    "math_round1": round1_rows,
+                    "math_round2": round2_rows,
+                    "math_round3": round3_rows,
+                    "reaction": reaction_rows,
+                }
+
+        return JSONResponse(content=response)
+    finally:
+        conn.close()
 
 
 @app.get("/api/my-best-scores")

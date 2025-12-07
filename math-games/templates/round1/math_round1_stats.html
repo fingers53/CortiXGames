@@ -3,11 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CortiX Games</title>
+    <title>Stats • CortiX Games</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/auth.css">
     <link rel="stylesheet" href="/static/styles.css">
     <link rel="stylesheet" href="/math-games/static/css/round1/math-rounds.css">
+    <style>
+        .stats-controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 18px; }
+        .pill { background: rgba(3,16,3,0.9); border: 1px solid rgba(13,223,107,0.35); border-radius: 999px; padding: 8px 14px; color: #b6f3c7; cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
+        .pill.active { background: #0ddf6b; color: #031003; border-color: #0ddf6b; }
+        .stats-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        .stats-table th, .stats-table td { padding: 10px 8px; border-bottom: 1px solid rgba(13,223,107,0.3); text-align: left; }
+        .stats-table th { color: #7cffc4; letter-spacing: 0.02em; }
+        .muted { color: #7cf0a3; opacity: 0.86; }
+        .metric-note { margin-top: 6px; color: #7cf0a3; }
+        @media (max-width: 640px) {
+            .stats-controls { flex-direction: column; align-items: flex-start; }
+            .pill { width: 100%; text-align: center; }
+            .math-rounds-header { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
 </head>
 <body>
     <div class="auth-bar">
@@ -26,218 +41,204 @@
     <div class="math-rounds-container">
         <header class="math-rounds-header">
             <div>
-                <h1>Round 1 Stats</h1>
-                <p class="subtitle">Score distribution and difficulty snapshot</p>
+                <h1>Performance stats</h1>
+                <p class="subtitle">Compare each game across age, sex, handedness, and country.</p>
             </div>
             <div class="actions">
-                <a class="link" href="/math-game">Play</a>
-                <a class="link" href="/math-game/leaderboard">Leaderboard</a>
+                <a class="link" href="/">Home</a>
+                <a class="link" href="/profile">Profile</a>
             </div>
         </header>
 
         <section class="panel">
-            <h2>Score distribution</h2>
-            <div id="histogram" class="histogram"></div>
+            <h2>Game</h2>
+            <div class="stats-controls" id="game-toggle"></div>
+            <p class="metric-note" id="game-description"></p>
         </section>
 
         <section class="panel">
-            <h2>Difficulty snapshot</h2>
-            <p class="muted" id="difficulty-note">Loading question difficulty…</p>
-            <div class="difficulty-grid" id="difficulty-grid"></div>
+            <h2>Attribute</h2>
+            <div class="stats-controls" id="attribute-toggle"></div>
+            <p class="metric-note">Only attributes you have filled in are shown.</p>
         </section>
 
         <section class="panel">
-            <h2>Performance by profile attributes</h2>
-            <p class="muted">Average correct answers (per run) and reaction speed grouped by age band, sex, and handedness.</p>
-            <div class="attribute-grid" id="attribute-panels"></div>
+            <h2>Metric</h2>
+            <div class="stats-controls" id="metric-toggle"></div>
+            <p class="metric-note" id="metric-description"></p>
+        </section>
+
+        <section class="panel">
+            <h2>Breakdown</h2>
+            <div id="stats-table-container" class="panel breakdown"></div>
         </section>
     </div>
 
     <script>
-        function renderHistogram(buckets) {
-            const container = document.getElementById('histogram');
-            container.innerHTML = '';
-            if (!buckets.length) {
-                container.textContent = 'No runs yet. Play a round to populate the stats!';
-                return;
-            }
-            const maxCount = Math.max(...buckets.map(b => b.count));
-            buckets.forEach((b) => {
-                const bar = document.createElement('div');
-                bar.className = 'bar';
-                const height = maxCount ? (b.count / maxCount) * 100 : 0;
-                bar.style.height = `${height}%`;
-                bar.title = `${b.min}-${b.max}: ${b.count}`;
-                const label = document.createElement('span');
-                label.textContent = `${b.min}-${b.max}`;
-                bar.appendChild(label);
-                container.appendChild(bar);
-            });
-        }
+        const attributeLabels = {
+            age_band: 'Age band',
+            sex: 'Sex',
+            handedness: 'Handedness',
+            country_code: 'Country'
+        };
 
-        function renderDifficulty(summary) {
-            const grid = document.getElementById('difficulty-grid');
-            const note = document.getElementById('difficulty-note');
-            grid.innerHTML = '';
-            const hardest = summary.hardest_questions || [];
-            const easiest = summary.easiest_questions || [];
-            if (!hardest.length && !easiest.length) {
-                note.textContent = 'Difficulty modeling coming soon — data will appear here once implemented.';
-                return;
-            }
-            note.textContent = '';
-            const renderSection = (title, list) => {
-                const section = document.createElement('div');
-                section.className = 'difficulty-section';
-                const heading = document.createElement('h3');
-                heading.textContent = title;
-                section.appendChild(heading);
-                if (!list.length) {
-                    const p = document.createElement('p');
-                    p.textContent = 'No data yet.';
-                    section.appendChild(p);
-                } else {
-                    const table = document.createElement('table');
-                    table.innerHTML = `
-                        <thead><tr><th>Expression</th><th>Avg time (s)</th><th>Avg wrong</th><th>Samples</th></tr></thead>
-                        <tbody></tbody>
-                    `;
-                    const tbody = table.querySelector('tbody');
-                    list.forEach((item) => {
-                        const expr = `${item.a} ${item.operator} ${item.b}`;
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${expr}</td>
-                            <td>${((item.avg_time_ms || 0) / 1000).toFixed(2)}</td>
-                            <td>${(item.avg_wrong_attempts || 0).toFixed(2)}</td>
-                            <td>${item.samples || 0}</td>
-                        `;
-                        tbody.appendChild(row);
-                    });
-                    section.appendChild(table);
+        const gameConfigs = {
+            math: {
+                label: 'Math',
+                description: 'Speed, correctness, and tilt (error streak risk) across rounds.',
+                metrics: {
+                    speed: { label: 'Speed (ms)', description: 'Average time to answer per round.', formatter: (v) => formatMetric(v, ' ms'), fields: ['math_round1', 'math_round2', 'math_round3'], valueKey: 'avg_speed_ms' },
+                    correctness: { label: 'Correctness', description: 'Average accuracy across attempts.', formatter: (v) => formatMetric(v * 100, '%'), fields: ['math_round1', 'math_round2', 'math_round3'], valueKey: 'avg_accuracy' },
+                    tilt: { label: 'Tilt (errors)', description: 'Share of wrong answers when fatigue kicks in.', formatter: (v) => formatMetric(v * 100, '%'), fields: ['math_round1', 'math_round2', 'math_round3'], valueKey: 'tilt_rate' }
                 }
-                grid.appendChild(section);
-            };
-            renderSection('Hardest', hardest);
-            renderSection('Easiest', easiest);
-        }
+            },
+            memory: {
+                label: 'Memory',
+                description: 'How well players perform on each cognitive memory round.',
+                metrics: {
+                    memory_round1: { label: 'Round 1 — pattern recall', description: 'Recreate a pattern accurately.', formatter: (v) => formatMetric(v), fields: ['memory_round1'], valueKey: 'avg_score' },
+                    memory_round2: { label: 'Round 2 — resist distraction', description: 'Remember a sequence while ignoring noise.', formatter: (v) => formatMetric(v), fields: ['memory_round2'], valueKey: 'avg_score' },
+                    memory_round3: { label: 'Round 3 — spot changes', description: 'Catch subtle differences between rounds.', formatter: (v) => formatMetric(v), fields: ['memory_round3'], valueKey: 'avg_score' }
+                }
+            },
+            reaction: {
+                label: 'Reaction',
+                description: 'Measure reaction speed, correctness, and tilt.',
+                metrics: {
+                    speed: { label: 'Speed (ms)', description: 'Average reaction time.', formatter: (v) => formatMetric(v, ' ms'), fields: ['reaction'], valueKey: 'avg_reaction_ms' },
+                    correctness: { label: 'Correctness', description: 'Overall accuracy on stimuli.', formatter: (v) => formatMetric(v * 100, '%'), fields: ['reaction'], valueKey: 'avg_accuracy' },
+                    tilt: { label: 'Tilt (errors)', description: 'Error streak risk (1 - accuracy).', formatter: (v) => formatMetric(v * 100, '%'), fields: ['reaction'], valueKey: 'tilt_rate' }
+                }
+            }
+        };
+
+        let statsData = {};
+        let selectedGame = 'math';
+        let selectedMetric = 'speed';
+        let selectedAttribute = 'age_band';
 
         function formatMetric(value, suffix = '') {
             if (value === null || value === undefined || Number.isNaN(value)) return '—';
-            return `${Number(value).toFixed(1)}${suffix}`;
+            const rounded = Number(value);
+            if (!Number.isFinite(rounded)) return '—';
+            return `${rounded.toFixed(suffix.includes('ms') ? 0 : 1)}${suffix}`;
         }
 
-        function renderAttributeBreakdown(dataset) {
-            const container = document.getElementById('attribute-panels');
-            if (!container) return;
+        function renderPills(container, items, activeKey, onClick) {
             container.innerHTML = '';
-            if (!dataset) {
-                container.textContent = 'No attribute data available yet.';
+            items.forEach(({ key, label }) => {
+                const pill = document.createElement('button');
+                pill.className = 'pill' + (key === activeKey ? ' active' : '');
+                pill.textContent = label;
+                pill.addEventListener('click', () => onClick(key));
+                container.appendChild(pill);
+            });
+        }
+
+        function renderTable() {
+            const game = gameConfigs[selectedGame];
+            const metric = game.metrics[selectedMetric];
+            const attrData = statsData[selectedAttribute] || [];
+            const tableContainer = document.getElementById('stats-table-container');
+
+            document.getElementById('game-description').textContent = game.description;
+            document.getElementById('metric-description').textContent = metric.description;
+
+            if (!attrData.length) {
+                tableContainer.textContent = 'No data available for this attribute yet. Play a few rounds!';
                 return;
             }
 
-            const attributeLabels = {
-                age_band: 'Age band',
-                sex: 'Sex',
-                handedness: 'Handedness',
-            };
+            const table = document.createElement('table');
+            table.className = 'stats-table';
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            headerRow.innerHTML = `<th>Group</th>${metric.fields.map(f => `<th>${friendlyLabel(f)}</th>`).join('')}<th>Samples</th>`;
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
 
-            Object.entries(attributeLabels).forEach(([key, label]) => {
-                const data = dataset[key];
-                if (!data) return;
-                const card = document.createElement('div');
-                card.className = 'panel attribute-card';
+            const tbody = document.createElement('tbody');
+            attrData.forEach((row) => {
+                const label = row.label || 'Unknown';
+                const values = metric.fields.map((field) => {
+                    const bucket = row[field];
+                    if (!bucket) return '<td>—</td>';
+                    const raw = bucket[metric.valueKey];
+                    return `<td>${metric.formatter(raw)}</td>`;
+                }).join('');
+                const samples = metric.fields.map((field) => row[field]?.samples || 0).reduce((a, b) => a + b, 0);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${label}</td>${values}<td>${samples}</td>`;
+                tbody.appendChild(tr);
+            });
 
-                const rowsByLabel = new Map();
-                const addValues = (list, field, sampleField, averageField) => {
-                    (list || []).forEach((entry) => {
-                        const row = rowsByLabel.get(entry.label) || { label: entry.label };
-                        row[field] = entry[averageField];
-                        row[sampleField] = entry.samples;
-                        rowsByLabel.set(entry.label, row);
-                    });
-                };
+            table.appendChild(tbody);
+            tableContainer.innerHTML = '';
+            tableContainer.appendChild(table);
+        }
 
-                addValues(data.math_round1, 'round1', 'round1_samples', 'avg_correct');
-                addValues(data.math_round2, 'round2', 'round2_samples', 'avg_correct');
-                addValues(data.math_round3, 'round3', 'round3_samples', 'avg_correct');
-                addValues(data.reaction, 'reaction_ms', 'reaction_samples', 'avg_reaction_ms');
+        function friendlyLabel(fieldKey) {
+            if (fieldKey === 'reaction') return 'Reaction';
+            if (fieldKey === 'memory_round1') return 'Memory R1';
+            if (fieldKey === 'memory_round2') return 'Memory R2';
+            if (fieldKey === 'memory_round3') return 'Memory R3';
+            if (fieldKey === 'math_round1') return 'Math R1';
+            if (fieldKey === 'math_round2') return 'Math R2';
+            if (fieldKey === 'math_round3') return 'Math R3';
+            return fieldKey;
+        }
 
-                const labelsList = Array.from(rowsByLabel.values()).sort((a, b) => {
-                    if (!a.label) return -1;
-                    if (!b.label) return 1;
-                    return a.label.localeCompare(b.label);
+        function setupControls() {
+            const gameContainer = document.getElementById('game-toggle');
+            renderPills(gameContainer, Object.entries(gameConfigs).map(([key, value]) => ({ key, label: value.label })), selectedGame, (key) => {
+                selectedGame = key;
+                selectedMetric = Object.keys(gameConfigs[key].metrics)[0];
+                renderMetricPills();
+                renderTable();
+            });
+
+            const attributeContainer = document.getElementById('attribute-toggle');
+            const attributeOptions = Object.keys(statsData)
+                .filter((key) => statsData[key] && statsData[key].length)
+                .map((key) => ({ key, label: attributeLabels[key] || key }));
+            if (!attributeOptions.length) {
+                attributeContainer.textContent = 'Fill out your profile (age, sex, handedness, country) to view stats.';
+            } else {
+                selectedAttribute = attributeOptions[0].key;
+                renderPills(attributeContainer, attributeOptions, selectedAttribute, (key) => {
+                    selectedAttribute = key;
+                    renderTable();
                 });
+            }
 
-                card.innerHTML = `
-                    <h3>${label}</h3>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Group</th>
-                                <th>Round 1 avg correct</th>
-                                <th>Round 2 avg correct</th>
-                                <th>Round 3 avg correct</th>
-                                <th>Avg reaction (ms)</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                `;
+            renderMetricPills();
+        }
 
-                const tbody = card.querySelector('tbody');
-                labelsList.forEach((entry) => {
-                    const round1 = entry.round1 !== undefined
-                        ? `${formatMetric(entry.round1)} (n=${entry.round1_samples || 0})`
-                        : '—';
-                    const round2 = entry.round2 !== undefined
-                        ? `${formatMetric(entry.round2)} (n=${entry.round2_samples || 0})`
-                        : '—';
-                    const round3 = entry.round3 !== undefined
-                        ? `${formatMetric(entry.round3)} (n=${entry.round3_samples || 0})`
-                        : '—';
-                    const reaction = entry.reaction_ms !== undefined
-                        ? `${formatMetric(entry.reaction_ms)} (n=${entry.reaction_samples || 0})`
-                        : '—';
-
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${entry.label || 'Unknown'}</td>
-                        <td>${round1}</td>
-                        <td>${round2}</td>
-                        <td>${round3}</td>
-                        <td>${reaction}</td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-
-                container.appendChild(card);
+        function renderMetricPills() {
+            const metricContainer = document.getElementById('metric-toggle');
+            const metricOptions = Object.entries(gameConfigs[selectedGame].metrics).map(([key, value]) => ({ key, label: value.label }));
+            renderPills(metricContainer, metricOptions, selectedMetric, (key) => {
+                selectedMetric = key;
+                renderTable();
             });
         }
 
-        fetch('/api/math-game/yetamax/score-distribution')
-            .then((resp) => resp.json())
-            .then((data) => renderHistogram(data.buckets || []))
-            .catch(() => {
-                const container = document.getElementById('histogram');
-                container.textContent = 'Could not load score distribution.';
-            });
-
-        fetch('/api/math-game/yetamax/difficulty-summary')
-            .then((resp) => resp.json())
-            .then((data) => renderDifficulty(data))
-            .catch(() => {
-                const note = document.getElementById('difficulty-note');
-                note.textContent = 'Could not load difficulty data.';
-            });
-
         fetch('/api/stats/profile-breakdown')
-            .then((resp) => resp.json())
-            .then((data) => renderAttributeBreakdown(data))
+            .then((resp) => {
+                if (!resp.ok) {
+                    throw new Error('Unable to load stats');
+                }
+                return resp.json();
+            })
+            .then((data) => {
+                statsData = data || {};
+                setupControls();
+                renderTable();
+            })
             .catch((err) => {
                 console.error('Failed to load attribute breakdown', err);
-                const container = document.getElementById('attribute-panels');
-                container.textContent = 'Unable to load attribute breakdown.';
+                const container = document.getElementById('stats-table-container');
+                container.textContent = 'Unable to load attribute breakdown. Make sure you are signed in and your profile is complete.';
             });
     </script>
 </body>

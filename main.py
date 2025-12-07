@@ -324,6 +324,20 @@ def get_user_by_id(conn, user_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
+def is_profile_complete(user: Optional[dict]) -> bool:
+    if not user:
+        return False
+
+    required_keys = ("handedness", "sex", "country_code", "age_band")
+    for key in required_keys:
+        value = user.get(key)
+        if value is None:
+            return False
+        if isinstance(value, str) and not value.strip():
+            return False
+    return True
+
+
 
 
 def ensure_session_tokens(request: Request):
@@ -808,21 +822,29 @@ async def reaction_game(request: Request, current_user=Depends(get_current_user)
 
 @app.get("/leaderboard", response_class=HTMLResponse)
 async def leaderboard(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     return render_template("leaderboards/leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/reaction-game", response_class=HTMLResponse)
 async def reaction_game_leaderboard(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     return render_template("leaderboards/reaction_leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/memory-game", response_class=HTMLResponse)
 async def memory_game_leaderboard(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     return render_template("leaderboards/memory_leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/yetamax", response_class=HTMLResponse)
 async def yetamax_leaderboard_redirect(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     return render_template("round1/math_round1_leaderboard.html", request, {"current_user": current_user})
 
 
@@ -1165,7 +1187,9 @@ async def submit_memory_score(
 
 
 @app.get("/api/leaderboard/reaction-game")
-async def reaction_leaderboard_api():
+async def reaction_leaderboard_api(current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sign in required")
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -1211,7 +1235,9 @@ async def reaction_leaderboard_api():
         conn.close()
 
 @app.get("/api/leaderboard/memory-game")
-async def memory_leaderboard_api():
+async def memory_leaderboard_api(current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sign in required")
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -1286,6 +1312,8 @@ async def yetamax_game(request: Request, current_user=Depends(get_current_user))
 async def yetamax_leaderboard_page(
     request: Request, current_user=Depends(get_current_user)
 ):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     return render_template(
         "round1/math_round1_leaderboard.html",
         request,
@@ -1298,6 +1326,10 @@ async def yetamax_leaderboard_page(
 @app.get("/math-game/stats", response_class=HTMLResponse)
 @app.get("/math-game/yetamax/stats", response_class=HTMLResponse)
 async def yetamax_stats_page(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+    if not is_profile_complete(current_user):
+        return RedirectResponse("/profile", status_code=status.HTTP_302_FOUND)
     return render_template(
         "round1/math_round1_stats.html",
         request,
@@ -1311,6 +1343,8 @@ async def yetamax_stats_page(request: Request, current_user=Depends(get_current_
 async def maveric_leaderboard_page(
     request: Request, current_user=Depends(get_current_user)
 ):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     round_param = request.query_params.get("round")
     template_name = (
         "round3/math_round3_leaderboard.html"
@@ -1601,7 +1635,9 @@ async def submit_math_session(
 
 
 @app.get("/api/math-game/yetamax/leaderboard")
-async def yetamax_leaderboard_api():
+async def yetamax_leaderboard_api(current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sign in required")
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
@@ -1641,7 +1677,9 @@ async def yetamax_leaderboard_api():
 
 
 @app.get("/api/math-game/maveric/leaderboard")
-async def maveric_leaderboard_api(request: Request):
+async def maveric_leaderboard_api(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sign in required")
     round_index_param = request.query_params.get("round_index")
     round_index = None
     try:
@@ -1726,22 +1764,42 @@ def _attribute_label_expr(attr: str) -> str:
         return "COALESCE(NULLIF(u.age_band, ''), NULLIF(u.age_range, ''), 'Unknown')"
     if attr == "sex":
         return "COALESCE(NULLIF(u.sex, ''), NULLIF(u.gender, ''), 'Unknown')"
+    if attr == "country_code":
+        return "COALESCE(NULLIF(u.country_code, ''), 'Unknown')"
     return "COALESCE(NULLIF(u.handedness, ''), 'Unknown')"
 
 
 @app.get("/api/stats/profile-breakdown")
-async def profile_attribute_breakdown():
+async def profile_attribute_breakdown(current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    if not is_profile_complete(current_user):
+        raise HTTPException(status_code=403, detail="Complete your profile to view stats")
+
     conn = get_db_connection()
-    attr_keys = ("age_band", "sex", "handedness")
+    attr_keys = ("age_band", "sex", "handedness", "country_code")
+    allowed_attrs = [key for key in attr_keys if current_user.get(key)]
+
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-            response = {}
-            for attr in attr_keys:
+            response: dict[str, list[dict[str, object]]] = {}
+
+            for attr in allowed_attrs:
                 expr = _attribute_label_expr(attr)
+                stats_by_label: dict[str, dict[str, object]] = {}
+
+                def add_metric(label: str, key: str, value: dict[str, object]):
+                    entry = stats_by_label.setdefault("" if label is None else str(label), {"label": label})
+                    entry[key] = value
 
                 cursor.execute(
                     f"""
-                    SELECT {expr} AS label, AVG(s.correct_count) AS avg_correct, COUNT(*) AS samples
+                    SELECT
+                        {expr} AS label,
+                        AVG(s.correct_count::float / NULLIF(s.correct_count + s.wrong_count, 0)) AS avg_accuracy,
+                        AVG(s.avg_time_ms) AS avg_speed_ms,
+                        AVG(s.wrong_count::float / NULLIF(s.correct_count + s.wrong_count, 0)) AS tilt_rate,
+                        COUNT(*) AS samples
                     FROM math_round1_scores s
                     JOIN users u ON u.id = s.user_id
                     WHERE s.is_valid = TRUE
@@ -1749,11 +1807,26 @@ async def profile_attribute_breakdown():
                     ORDER BY label
                     """
                 )
-                round1_rows = [dict(row) for row in cursor.fetchall()]
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "math_round1",
+                        {
+                            "avg_accuracy": row["avg_accuracy"],
+                            "avg_speed_ms": row["avg_speed_ms"],
+                            "tilt_rate": row["tilt_rate"],
+                            "samples": row["samples"],
+                        },
+                    )
 
                 cursor.execute(
                     f"""
-                    SELECT {expr} AS label, AVG(s.correct_count) AS avg_correct, COUNT(*) AS samples
+                    SELECT
+                        {expr} AS label,
+                        AVG(s.correct_count::float / NULLIF(COALESCE(s.total_questions, s.correct_count + s.wrong_count), 0)) AS avg_accuracy,
+                        AVG(s.avg_time_ms) AS avg_speed_ms,
+                        AVG(s.wrong_count::float / NULLIF(COALESCE(s.total_questions, s.correct_count + s.wrong_count), 0)) AS tilt_rate,
+                        COUNT(*) AS samples
                     FROM math_round_mixed_scores s
                     JOIN users u ON u.id = s.user_id
                     WHERE s.is_valid = TRUE AND (s.round_index = 2 OR s.round_index IS NULL)
@@ -1761,11 +1834,26 @@ async def profile_attribute_breakdown():
                     ORDER BY label
                     """
                 )
-                round2_rows = [dict(row) for row in cursor.fetchall()]
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "math_round2",
+                        {
+                            "avg_accuracy": row["avg_accuracy"],
+                            "avg_speed_ms": row["avg_speed_ms"],
+                            "tilt_rate": row["tilt_rate"],
+                            "samples": row["samples"],
+                        },
+                    )
 
                 cursor.execute(
                     f"""
-                    SELECT {expr} AS label, AVG(s.correct_count) AS avg_correct, COUNT(*) AS samples
+                    SELECT
+                        {expr} AS label,
+                        AVG(s.correct_count::float / NULLIF(COALESCE(s.total_questions, s.correct_count + s.wrong_count), 0)) AS avg_accuracy,
+                        AVG(s.avg_time_ms) AS avg_speed_ms,
+                        AVG(s.wrong_count::float / NULLIF(COALESCE(s.total_questions, s.correct_count + s.wrong_count), 0)) AS tilt_rate,
+                        COUNT(*) AS samples
                     FROM math_round_mixed_scores s
                     JOIN users u ON u.id = s.user_id
                     WHERE s.is_valid = TRUE AND s.round_index = 3
@@ -1773,25 +1861,104 @@ async def profile_attribute_breakdown():
                     ORDER BY label
                     """
                 )
-                round3_rows = [dict(row) for row in cursor.fetchall()]
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "math_round3",
+                        {
+                            "avg_accuracy": row["avg_accuracy"],
+                            "avg_speed_ms": row["avg_speed_ms"],
+                            "tilt_rate": row["tilt_rate"],
+                            "samples": row["samples"],
+                        },
+                    )
 
                 cursor.execute(
                     f"""
-                    SELECT {expr} AS label, AVG(r.average_time_ms) AS avg_reaction_ms, COUNT(*) AS samples
+                    SELECT
+                        {expr} AS label,
+                        AVG(r.accuracy) AS avg_accuracy,
+                        AVG(r.average_time_ms) AS avg_reaction_ms,
+                        AVG(1 - r.accuracy) AS tilt_rate,
+                        COUNT(*) AS samples
                     FROM reaction_scores r
                     JOIN users u ON u.id = r.user_id
                     GROUP BY label
                     ORDER BY label
                     """
                 )
-                reaction_rows = [dict(row) for row in cursor.fetchall()]
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "reaction",
+                        {
+                            "avg_accuracy": row["avg_accuracy"],
+                            "avg_reaction_ms": row["avg_reaction_ms"],
+                            "tilt_rate": row["tilt_rate"],
+                            "samples": row["samples"],
+                        },
+                    )
 
-                response[attr] = {
-                    "math_round1": round1_rows,
-                    "math_round2": round2_rows,
-                    "math_round3": round3_rows,
-                    "reaction": reaction_rows,
-                }
+                cursor.execute(
+                    f"""
+                    SELECT {expr} AS label, AVG(m.round1_score) AS avg_score, COUNT(*) AS samples
+                    FROM memory_scores m
+                    JOIN users u ON u.id = m.user_id
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "memory_round1",
+                        {
+                            "avg_score": row["avg_score"],
+                            "samples": row["samples"],
+                        },
+                    )
+
+                cursor.execute(
+                    f"""
+                    SELECT {expr} AS label, AVG(m.round2_score) AS avg_score, COUNT(*) AS samples
+                    FROM memory_scores m
+                    JOIN users u ON u.id = m.user_id
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "memory_round2",
+                        {
+                            "avg_score": row["avg_score"],
+                            "samples": row["samples"],
+                        },
+                    )
+
+                cursor.execute(
+                    f"""
+                    SELECT {expr} AS label, AVG(m.round3_score) AS avg_score, COUNT(*) AS samples
+                    FROM memory_scores m
+                    JOIN users u ON u.id = m.user_id
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "memory_round3",
+                        {
+                            "avg_score": row["avg_score"],
+                            "samples": row["samples"],
+                        },
+                    )
+
+                response[attr] = list(
+                    sorted(stats_by_label.values(), key=lambda row: ("" if row["label"] is None else str(row["label"]).lower()))
+                )
 
         return JSONResponse(content=response)
     finally:

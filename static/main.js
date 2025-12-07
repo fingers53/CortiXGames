@@ -64,10 +64,7 @@ function confirmUsername() {
 }
 
 function getSavedUsername() {
-    // If the backend says the user is logged OUT, ignore whatever is in localStorage.
-    if (!isLoggedIn) {
-        return null;
-    }
+    // Allow guests to reuse the username they typed so navigation keeps working.
     return localStorage.getItem(USERNAME_KEY);
 }
 

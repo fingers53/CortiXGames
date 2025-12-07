@@ -21,6 +21,9 @@ export function endMemoryGame() {
     hideCanvas();
     const username = localStorage.getItem("username") || "";
 
+    // Show the end screen immediately while the score is being saved
+    showMemoryEndScreen(null, true);
+
     fetch("/memory-game/submit_score", {
         method: "POST",
         headers: {
@@ -28,7 +31,7 @@ export function endMemoryGame() {
             "X-CSRF-Token": csrfToken,
         },
         body: JSON.stringify({ username, questionLog }),
-    })
+        })
         .then((res) => res.json())
         .then((data) => {
             if (data.status === "success") {
@@ -58,7 +61,7 @@ export function startMemoryGame() {
 
 window.addEventListener("DOMContentLoaded", startMemoryGame);
 
-function showMemoryEndScreen(finalScore) {
+function showMemoryEndScreen(finalScore, isSaving = false) {
     const timerDisplay = document.getElementById("timerDisplay");
     const introDisplay = document.getElementById("introDisplay");
     const feedbackOverlay = document.getElementById("feedbackOverlay");
@@ -77,10 +80,14 @@ function showMemoryEndScreen(finalScore) {
     }
     if (!endScreen) return;
 
+    const effectiveScore = isSaving ? "saving" : finalScore;
+
     const scoreSection =
-        finalScore === null
+        effectiveScore === "saving"
+            ? `<p class="end-score">Saving your score...</p>`
+            : effectiveScore === null
             ? `<p class="end-score">Score saved locally. Server unavailable.</p>`
-            : `<p class="end-score">Your score: ${finalScore}</p>`;
+            : `<p class="end-score">Your score: ${effectiveScore}</p>`;
 
     endScreen.innerHTML = `
         <div class="end-card">

@@ -3,6 +3,8 @@ from typing import Optional
 import psycopg2
 import psycopg2.extras
 
+from typing import Optional
+
 from app.security import assert_valid_username
 from app.db import get_db_connection
 
@@ -96,6 +98,20 @@ def resolve_user_id(conn, current_user: Optional[dict], username: Optional[str],
 
     assert_valid_username(username or "")
     return get_or_create_user(conn, username, country_code)
+
+
+def is_profile_complete(user: Optional[dict]) -> bool:
+    if not user:
+        return False
+
+    required_keys = ("handedness", "sex", "country_code", "age_band")
+    for key in required_keys:
+        value = user.get(key)
+        if value is None:
+            return False
+        if isinstance(value, str) and not value.strip():
+            return False
+    return True
 
 
 def fetch_recent_attempts(conn, user_id: int) -> list[dict]:

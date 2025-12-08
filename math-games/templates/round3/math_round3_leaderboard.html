@@ -18,6 +18,7 @@
             <a href="/" class="nav-button">Home</a>
             {% if current_user %}
             <span class="user-chip">Logged in as <a href="/profile" class="nav-link">{{ current_user.username }}</a></span>
+            <a class="nav-button" href="/logout">Logout</a>
             {% else %}
             <a class="nav-link" href="/login">Sign in</a>
             {% endif %}
@@ -58,7 +59,7 @@
     <script>
         async function loadLeaderboard() {
             try {
-                const resp = await fetch(`/api/math-game/maveric/leaderboard?round_index=3`);
+                const resp = await fetch(`/api/math-game/round-mixed/leaderboard?round_index=3`);
                 const data = await resp.json();
                 const tbody = document.getElementById('leaderboard-rows');
                 tbody.innerHTML = '';

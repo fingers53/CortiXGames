@@ -24,6 +24,9 @@
             <span class="status-name">Not signed in</span>
             {% endif %}
         </div>
+        {% if current_user %}
+        <a class="logout-link" href="/logout">Logout</a>
+        {% endif %}
     </div>
     <div class="container">
         <div class="title">

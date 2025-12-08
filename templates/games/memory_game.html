@@ -21,6 +21,9 @@
             <span class="status-name">Not signed in</span>
             {% endif %}
         </div>
+        {% if current_user %}
+        <a class="logout-link" href="/logout">Logout</a>
+        {% endif %}
     </div>
 {% if not current_user %}
     <div class="inline-upgrade" id="inline-upgrade">

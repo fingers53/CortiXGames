@@ -25,7 +25,9 @@ from fastapi.templating import Jinja2Templates
 from passlib.context import CryptContext
 
 from scoring import calculate_reaction_game_score
-from app.services.users import normalize_profile_fields
+from app.services.users import is_profile_complete, normalize_profile_fields
+from app.utils.validation import enforce_range
+from app.services.scoring import calculate_arithmetic_score as calculate_yetamax_score
 
 load_dotenv()
 
@@ -324,20 +326,6 @@ def get_user_by_id(conn, user_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def is_profile_complete(user: Optional[dict]) -> bool:
-    if not user:
-        return False
-
-    required_keys = ("handedness", "sex", "country_code", "age_band")
-    for key in required_keys:
-        value = user.get(key)
-        if value is None:
-            return False
-        if isinstance(value, str) and not value.strip():
-            return False
-    return True
-
-
 
 
 def ensure_session_tokens(request: Request):
@@ -436,30 +424,6 @@ def validate_answer_record(answer_record: List[Dict]):
             raise HTTPException(status_code=422, detail="Reaction times must be between 80 and 5000 ms")
         if item.get("isCorrect") not in (True, False):
             raise HTTPException(status_code=422, detail="Each answer must include correctness")
-
-
-def enforce_range(value: float, minimum: float, maximum: float, label: str):
-    if value is None or not math.isfinite(value) or value < minimum or value > maximum:
-        raise HTTPException(
-            status_code=422,
-            detail=f"{label} must be between {minimum} and {maximum}",
-        )
-
-
-def calculate_yetamax_score(
-    correct_count: int, wrong_count: int, avg_time_ms: float, per_questions=None
-) -> int:
-    base_score = correct_count * 10
-    penalty = wrong_count * 2
-
-    streak_penalty = 0
-    if per_questions:
-        for entry in per_questions:
-            wrong_attempts = int(entry.get("wrong_attempts") or 0)
-            if wrong_attempts > 1:
-                streak_penalty += wrong_attempts - 1
-
-    return base_score - penalty - streak_penalty
 
 
 def compute_memory_scores(question_log: List[Dict]) -> dict:
@@ -841,8 +805,8 @@ async def memory_game_leaderboard(request: Request, current_user=Depends(get_cur
     return render_template("leaderboards/memory_leaderboard.html", request, {"current_user": current_user})
 
 
-@app.get("/leaderboard/yetamax", response_class=HTMLResponse)
-async def yetamax_leaderboard_redirect(request: Request, current_user=Depends(get_current_user)):
+@app.get("/leaderboard/math", response_class=HTMLResponse)
+async def math_leaderboard_redirect(request: Request, current_user=Depends(get_current_user)):
     if not current_user:
         return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     return render_template("round1/math_round1_leaderboard.html", request, {"current_user": current_user})
@@ -1296,8 +1260,7 @@ async def memory_leaderboard_api(current_user=Depends(get_current_user)):
 
 
 @app.get("/math-game", response_class=HTMLResponse)
-@app.get("/math-game/yetamax", response_class=HTMLResponse)
-async def yetamax_game(request: Request, current_user=Depends(get_current_user)):
+async def math_game(request: Request, current_user=Depends(get_current_user)):
     return render_template(
         "round1/math_rounds_game.html",
         request,
@@ -1308,8 +1271,7 @@ async def yetamax_game(request: Request, current_user=Depends(get_current_user))
 
 
 @app.get("/math-game/leaderboard", response_class=HTMLResponse)
-@app.get("/math-game/yetamax/leaderboard", response_class=HTMLResponse)
-async def yetamax_leaderboard_page(
+async def math_leaderboard_page(
     request: Request, current_user=Depends(get_current_user)
 ):
     if not current_user:
@@ -1324,8 +1286,7 @@ async def yetamax_leaderboard_page(
 
 
 @app.get("/math-game/stats", response_class=HTMLResponse)
-@app.get("/math-game/yetamax/stats", response_class=HTMLResponse)
-async def yetamax_stats_page(request: Request, current_user=Depends(get_current_user)):
+async def math_stats_page(request: Request, current_user=Depends(get_current_user)):
     if not current_user:
         return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     if not is_profile_complete(current_user):
@@ -1339,8 +1300,8 @@ async def yetamax_stats_page(request: Request, current_user=Depends(get_current_
     )
 
 
-@app.get("/math-game/maveric/leaderboard", response_class=HTMLResponse)
-async def maveric_leaderboard_page(
+@app.get("/math-game/round-mixed/leaderboard", response_class=HTMLResponse)
+async def mixed_leaderboard_page(
     request: Request, current_user=Depends(get_current_user)
 ):
     if not current_user:
@@ -1405,7 +1366,7 @@ async def save_round1_score(request: Request, current_user):
     }
 
     if not current_user:
-        response_payload["yetamax_score_id"] = None
+        response_payload["round1_score_id"] = None
         response_payload["message"] = "Login to save your Round 1 score"
         return JSONResponse(content=response_payload)
 
@@ -1448,11 +1409,11 @@ async def save_round1_score(request: Request, current_user):
     finally:
         conn.close()
 
-    response_payload["yetamax_score_id"] = new_id
+    response_payload["round1_score_id"] = new_id
     return JSONResponse(content=response_payload)
 
 
-@app.post("/api/math-game/yetamax/submit")
+@app.post("/api/math-game/round1/submit")
 async def submit_round1_score(
     request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
 ):
@@ -1504,7 +1465,7 @@ async def _save_round_mixed_score(
     }
 
     if not current_user:
-        response_payload["maveric_score_id"] = None
+        response_payload["round_mixed_score_id"] = None
         response_payload["message"] = "Login to save your Round %d score" % round_index
         return response_payload
 
@@ -1549,7 +1510,7 @@ async def _save_round_mixed_score(
     finally:
         conn.close()
 
-    response_payload["maveric_score_id"] = new_id
+    response_payload["round_mixed_score_id"] = new_id
     return response_payload
 
 
@@ -1561,23 +1522,23 @@ async def save_round3_score(request: Request, current_user):
     return await _save_round_mixed_score(request, current_user, 3)
 
 
-@app.post("/api/math-game/yetamax/round2/submit")
-async def submit_maveric_score(
+@app.post("/api/math-game/round2/submit")
+async def submit_round2_score(
     request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
 ):
     response = await save_round2_score(request, current_user)
     return JSONResponse(content=response)
 
 
-@app.post("/api/math-game/yetamax/round3/submit")
-async def submit_maveric_score_round3(
+@app.post("/api/math-game/round3/submit")
+async def submit_round3_score(
     request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
 ):
     response = await save_round3_score(request, current_user)
     return JSONResponse(content=response)
 
 
-@app.post("/api/math-game/yetamax/session/submit")
+@app.post("/api/math-game/session/submit")
 async def submit_math_session(
     request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
 ):
@@ -1634,8 +1595,8 @@ async def submit_math_session(
     return JSONResponse(content={"status": "success", "session_id": new_id})
 
 
-@app.get("/api/math-game/yetamax/leaderboard")
-async def yetamax_leaderboard_api(current_user=Depends(get_current_user)):
+@app.get("/api/math-game/round1/leaderboard")
+async def round1_leaderboard_api(current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Sign in required")
     conn = get_db_connection()
@@ -1676,8 +1637,8 @@ async def yetamax_leaderboard_api(current_user=Depends(get_current_user)):
         conn.close()
 
 
-@app.get("/api/math-game/maveric/leaderboard")
-async def maveric_leaderboard_api(request: Request, current_user=Depends(get_current_user)):
+@app.get("/api/math-game/round-mixed/leaderboard")
+async def mixed_round_leaderboard_api(request: Request, current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Sign in required")
     round_index_param = request.query_params.get("round_index")
@@ -1727,8 +1688,8 @@ async def maveric_leaderboard_api(request: Request, current_user=Depends(get_cur
         conn.close()
 
 
-@app.get("/api/math-game/yetamax/score-distribution")
-async def yetamax_score_distribution():
+@app.get("/api/math-game/score-distribution")
+async def math_score_distribution():
     bucket_width = 20
     conn = get_db_connection()
     try:
@@ -1754,8 +1715,8 @@ async def yetamax_score_distribution():
         conn.close()
 
 
-@app.get("/api/math-game/yetamax/difficulty-summary")
-async def yetamax_difficulty_summary():
+@app.get("/api/math-game/difficulty-summary")
+async def math_difficulty_summary():
     return JSONResponse(content={"hardest_questions": [], "easiest_questions": []})
 
 

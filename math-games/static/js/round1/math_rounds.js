@@ -438,7 +438,7 @@ function buildOperatorBreakdown(targetEl, statsMap) {
 
 async function submitRound1Results(payload) {
     try {
-        const resp = await fetch('/api/math-game/yetamax/submit', {
+        const resp = await fetch('/api/math-game/round1/submit', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -456,7 +456,7 @@ async function submitRound1Results(payload) {
 
 async function submitRound2Results(payload) {
     try {
-        const resp = await fetch('/api/math-game/yetamax/round2/submit', {
+        const resp = await fetch('/api/math-game/round2/submit', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -474,7 +474,7 @@ async function submitRound2Results(payload) {
 
 async function submitRound3Results(payload) {
     try {
-        const resp = await fetch('/api/math-game/yetamax/round3/submit', {
+        const resp = await fetch('/api/math-game/round3/submit', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -492,7 +492,7 @@ async function submitRound3Results(payload) {
 
 async function submitSessionLink(round1Id, round2Id, round3Id, combinedScore) {
     try {
-        const resp = await fetch('/api/math-game/yetamax/session/submit', {
+        const resp = await fetch('/api/math-game/session/submit', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -552,7 +552,7 @@ function endRound(endedByTimeout) {
 
         submitRound1Results(payload).then((resp) => {
             const score = resp?.score ?? calculateLocalScore(stats);
-            round1ServerResult = { ...payload, score, is_valid: resp?.is_valid, id: resp?.yetamax_score_id };
+            round1ServerResult = { ...payload, score, is_valid: resp?.is_valid, id: resp?.round1_score_id };
             showIntermission('Round 1 complete', 'Round 2 is harder with decimals and missing percents. Shot clock still applies.', STATE.ROUND2);
         });
     } else if (gameState === STATE.ROUND2) {
@@ -581,7 +581,7 @@ function endRound(endedByTimeout) {
 
         submitRound2Results(payload).then((resp) => {
             const score = resp?.round2_score ?? calculateLocalScore(stats);
-            round2ServerResult = { ...payload, score, is_valid: resp?.is_valid, id: resp?.maveric_score_id };
+            round2ServerResult = { ...payload, score, is_valid: resp?.is_valid, id: resp?.round_mixed_score_id };
             showIntermission('Round 2 complete', 'Round 3 eases up slightly but keeps multi-step reasoning.', STATE.ROUND3);
         });
     } else if (gameState === STATE.ROUND3) {
@@ -610,10 +610,10 @@ function endRound(endedByTimeout) {
 
         submitRound3Results(payload).then((resp) => {
             const score = resp?.round3_score ?? calculateLocalScore(stats);
-            round3ServerResult = { ...payload, score, is_valid: resp?.is_valid, id: resp?.maveric_score_id };
+            round3ServerResult = { ...payload, score, is_valid: resp?.is_valid, id: resp?.round_mixed_score_id };
             const combined = (round1ServerResult?.score || 0) + (round2ServerResult?.score || 0) + score;
-            if (round1ServerResult?.id && round2ServerResult?.id && resp?.maveric_score_id) {
-                submitSessionLink(round1ServerResult.id, round2ServerResult.id, resp.maveric_score_id, combined);
+            if (round1ServerResult?.id && round2ServerResult?.id && resp?.round_mixed_score_id) {
+                submitSessionLink(round1ServerResult.id, round2ServerResult.id, resp.round_mixed_score_id, combined);
             }
             showFinalResults(score, combined, round2ServerResult?.type_breakdown || {}, typeBreakdown);
         });

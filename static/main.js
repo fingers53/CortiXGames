@@ -64,10 +64,7 @@ function confirmUsername() {
 }
 
 function getSavedUsername() {
-    // If the backend says the user is logged OUT, ignore whatever is in localStorage.
-    if (!isLoggedIn) {
-        return null;
-    }
+    // Allow guests to reuse the username they typed so navigation keeps working.
     return localStorage.getItem(USERNAME_KEY);
 }
 
@@ -173,7 +170,7 @@ window.addEventListener("DOMContentLoaded", () => {
     hydrateUsernameField();
     attachNavigation("memory-button", "/memory-game");
     attachNavigation("reaction-button", "/reaction-game");
-    attachNavigation("yetamax-button", "/math-game");
+    attachNavigation("math-round1-button", "/math-game");
 });
 
 window.confirmUsername = confirmUsername;

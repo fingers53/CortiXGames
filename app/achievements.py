@@ -86,9 +86,9 @@ def _total_rounds(cursor, user_id: int) -> int:
             UNION ALL
             SELECT id FROM memory_scores WHERE user_id = %s
             UNION ALL
-            SELECT id FROM yetamax_scores WHERE user_id = %s
+            SELECT id FROM math_round1_scores WHERE user_id = %s
             UNION ALL
-            SELECT id FROM maveric_scores WHERE user_id = %s
+            SELECT id FROM math_round_mixed_scores WHERE user_id = %s
             UNION ALL
             SELECT id FROM math_scores WHERE user_id = %s
         ) AS rounds
@@ -104,9 +104,9 @@ def _math_question_total(cursor, user_id: int) -> int:
         SELECT COALESCE(SUM(total_questions), 0) FROM (
             SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS total_questions FROM math_scores WHERE user_id = %s
             UNION ALL
-            SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS total_questions FROM yetamax_scores WHERE user_id = %s
+            SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS total_questions FROM math_round1_scores WHERE user_id = %s
             UNION ALL
-            SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS total_questions FROM maveric_scores WHERE user_id = %s
+            SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS total_questions FROM math_round_mixed_scores WHERE user_id = %s
         ) AS totals
         """,
         (user_id, user_id, user_id),
@@ -120,8 +120,8 @@ def _played_all_games(cursor, user_id: int) -> bool:
         SELECT
             EXISTS(SELECT 1 FROM reaction_scores WHERE user_id = %s) AS has_reaction,
             EXISTS(SELECT 1 FROM memory_scores WHERE user_id = %s) AS has_memory,
-            EXISTS(SELECT 1 FROM yetamax_scores WHERE user_id = %s) AS has_yetamax,
-            EXISTS(SELECT 1 FROM maveric_scores WHERE user_id = %s) AS has_maveric
+            EXISTS(SELECT 1 FROM math_round1_scores WHERE user_id = %s) AS has_round1,
+            EXISTS(SELECT 1 FROM math_round_mixed_scores WHERE user_id = %s) AS has_mixed
         """,
         (user_id, user_id, user_id, user_id),
     )
@@ -138,9 +138,9 @@ def _streak_length(cursor, user_id: int) -> int:
             UNION ALL
             SELECT created_at FROM memory_scores WHERE user_id = %s
             UNION ALL
-            SELECT created_at FROM yetamax_scores WHERE user_id = %s
+            SELECT created_at FROM math_round1_scores WHERE user_id = %s
             UNION ALL
-            SELECT created_at FROM maveric_scores WHERE user_id = %s
+            SELECT created_at FROM math_round_mixed_scores WHERE user_id = %s
             UNION ALL
             SELECT created_at FROM math_scores WHERE user_id = %s
             UNION ALL

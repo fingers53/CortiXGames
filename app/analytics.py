@@ -93,55 +93,55 @@ def _math_qpm(avg_time_ms: float | None) -> float | None:
 def get_math_metrics(conn, user_id: int) -> dict:
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
         cursor.execute(
-            "SELECT MAX(score) AS best FROM yetamax_scores WHERE user_id = %s",
+            "SELECT MAX(score) AS best FROM math_round1_scores WHERE user_id = %s",
             (user_id,),
         )
         round1_best = (_fetchone(cursor) or {}).get("best")
 
-        round1_accuracy, round1_rows = _math_accuracy(cursor, "yetamax_scores", user_id)
+        round1_accuracy, round1_rows = _math_accuracy(cursor, "math_round1_scores", user_id)
         cursor.execute(
-            "SELECT AVG(avg_time_ms) AS avg_time_ms FROM yetamax_scores WHERE user_id = %s",
+            "SELECT AVG(avg_time_ms) AS avg_time_ms FROM math_round1_scores WHERE user_id = %s",
             (user_id,),
         )
         round1_qpm = _math_qpm((_fetchone(cursor) or {}).get("avg_time_ms"))
 
         cursor.execute(
-            "SELECT MAX(score) AS best FROM maveric_scores WHERE user_id = %s AND (round_index = 2 OR round_index IS NULL)",
+            "SELECT MAX(score) AS best FROM math_round_mixed_scores WHERE user_id = %s AND (round_index = 2 OR round_index IS NULL)",
             (user_id,),
         )
         round2_best = (_fetchone(cursor) or {}).get("best")
         round2_accuracy, round2_rows = _math_accuracy(
-            cursor, "maveric_scores", user_id, "AND (round_index = 2 OR round_index IS NULL)"
+            cursor, "math_round_mixed_scores", user_id, "AND (round_index = 2 OR round_index IS NULL)"
         )
         cursor.execute(
-            "SELECT AVG(avg_time_ms) AS avg_time_ms FROM maveric_scores WHERE user_id = %s AND (round_index = 2 OR round_index IS NULL)",
+            "SELECT AVG(avg_time_ms) AS avg_time_ms FROM math_round_mixed_scores WHERE user_id = %s AND (round_index = 2 OR round_index IS NULL)",
             (user_id,),
         )
         round2_qpm = _math_qpm((_fetchone(cursor) or {}).get("avg_time_ms"))
 
         cursor.execute(
-            "SELECT MAX(score) AS best FROM maveric_scores WHERE user_id = %s AND round_index = 3",
+            "SELECT MAX(score) AS best FROM math_round_mixed_scores WHERE user_id = %s AND round_index = 3",
             (user_id,),
         )
         round3_best = (_fetchone(cursor) or {}).get("best")
-        round3_accuracy, round3_rows = _math_accuracy(cursor, "maveric_scores", user_id, "AND round_index = 3")
+        round3_accuracy, round3_rows = _math_accuracy(cursor, "math_round_mixed_scores", user_id, "AND round_index = 3")
         cursor.execute(
-            "SELECT AVG(avg_time_ms) AS avg_time_ms FROM maveric_scores WHERE user_id = %s AND round_index = 3",
+            "SELECT AVG(avg_time_ms) AS avg_time_ms FROM math_round_mixed_scores WHERE user_id = %s AND round_index = 3",
             (user_id,),
         )
         round3_qpm = _math_qpm((_fetchone(cursor) or {}).get("avg_time_ms"))
 
         # Aggregate for totals across all arithmetic rounds
         yetamax_rows = round1_rows
-        _, maveric_rows = _math_accuracy(cursor, "maveric_scores", user_id)
+        _, maveric_rows = _math_accuracy(cursor, "math_round_mixed_scores", user_id)
 
         cursor.execute(
-            "SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS questions FROM yetamax_scores WHERE user_id = %s",
+            "SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS questions FROM math_round1_scores WHERE user_id = %s",
             (user_id,),
         )
         total_questions = (_fetchone(cursor) or {}).get("questions") or 0
         cursor.execute(
-            "SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS questions FROM maveric_scores WHERE user_id = %s",
+            "SELECT COALESCE(SUM(correct_count + wrong_count), 0) AS questions FROM math_round_mixed_scores WHERE user_id = %s",
             (user_id,),
         )
         total_questions += (_fetchone(cursor) or {}).get("questions") or 0
@@ -182,9 +182,9 @@ def get_global_metrics(conn, user_id: int) -> dict:
                 UNION ALL
                 SELECT created_at FROM memory_scores WHERE user_id = %s
                 UNION ALL
-                SELECT created_at FROM yetamax_scores WHERE user_id = %s
+                SELECT created_at FROM math_round1_scores WHERE user_id = %s
                 UNION ALL
-                SELECT created_at FROM maveric_scores WHERE user_id = %s
+                SELECT created_at FROM math_round_mixed_scores WHERE user_id = %s
                 UNION ALL
                 SELECT created_at FROM math_scores WHERE user_id = %s
                 UNION ALL
@@ -202,9 +202,9 @@ def get_global_metrics(conn, user_id: int) -> dict:
                 UNION
                 SELECT DISTINCT DATE(created_at) FROM memory_scores WHERE user_id = %s
                 UNION
-                SELECT DISTINCT DATE(created_at) FROM yetamax_scores WHERE user_id = %s
+                SELECT DISTINCT DATE(created_at) FROM math_round1_scores WHERE user_id = %s
                 UNION
-                SELECT DISTINCT DATE(created_at) FROM maveric_scores WHERE user_id = %s
+                SELECT DISTINCT DATE(created_at) FROM math_round_mixed_scores WHERE user_id = %s
                 UNION
                 SELECT DISTINCT DATE(created_at) FROM math_scores WHERE user_id = %s
                 UNION

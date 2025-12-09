@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stats • CortiX Games</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/auth.css">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/math-games/static/css/round1/math-rounds.css">
+    <style>
+        .stats-controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 18px; }
+        .pill { background: rgba(3,16,3,0.9); border: 1px solid rgba(13,223,107,0.35); border-radius: 999px; padding: 8px 14px; color: #b6f3c7; cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
+        .pill.active { background: #0ddf6b; color: #031003; border-color: #0ddf6b; }
+        .stats-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        .stats-table th, .stats-table td { padding: 10px 8px; border-bottom: 1px solid rgba(13,223,107,0.3); text-align: left; }
+        .stats-table th { color: #7cffc4; letter-spacing: 0.02em; }
+        .muted { color: #7cf0a3; opacity: 0.86; }
+        .metric-note { margin-top: 6px; color: #7cf0a3; }
+        @media (max-width: 640px) {
+            .stats-controls { flex-direction: column; align-items: flex-start; }
+            .pill { width: 100%; text-align: center; }
+            .math-rounds-header { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-bar">
+        <a href="/" class="home-link" aria-label="Home">🏠</a>
+        <div class="auth-status">
+            {% if current_user %}
+            <span class="status-pill">Logged in</span>
+            <span class="status-name">{{ current_user.username }}</span>
+            {% else %}
+            <span class="status-pill guest">Guest</span>
+            <span class="status-name">Not signed in</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="math-rounds-container">
+        <header class="math-rounds-header">
+            <div>
+                <h1>Performance stats</h1>
+                <p class="subtitle">Compare each game across age, sex, handedness, and country.</p>
+            </div>
+            <div class="actions">
+                <a class="link" href="/">Home</a>
+                <a class="link" href="/profile">Profile</a>
+            </div>
+        </header>
+
+        <section class="panel">
+            <h2>Game</h2>
+            <div class="stats-controls" id="game-toggle"></div>
+            <p class="metric-note" id="game-description"></p>
+        </section>
+
+        <section class="panel">
+            <h2>Attribute</h2>
+            <div class="stats-controls" id="attribute-toggle"></div>
+            <p class="metric-note">Only attributes you have filled in are shown.</p>
+        </section>
+
+        <section class="panel">
+            <h2>Metric</h2>
+            <div class="stats-controls" id="metric-toggle"></div>
+            <p class="metric-note" id="metric-description"></p>
+        </section>
+
+        <section class="panel">
+            <h2>Breakdown</h2>
+            <div id="stats-table-container" class="panel breakdown"></div>
+        </section>
+    </div>
+
+    <script>
+        const attributeLabels = {
+            age_band: 'Age band',
+            sex: 'Sex',
+            handedness: 'Handedness',
+            country_code: 'Country'
+        };
+
+        const gameConfigs = {
+            math: {
+                label: 'Math',
+                description: 'Speed, correctness, and tilt (error streak risk) across rounds.',
+                metrics: {
+                    speed: { label: 'Speed (ms)', description: 'Average time to answer per round.', formatter: (v) => formatMetric(v, ' ms'), fields: ['math_round1', 'math_round2', 'math_round3'], valueKey: 'avg_speed_ms' },
+                    correctness: { label: 'Correctness', description: 'Average accuracy across attempts.', formatter: (v) => formatMetric(v * 100, '%'), fields: ['math_round1', 'math_round2', 'math_round3'], valueKey: 'avg_accuracy' },
+                    tilt: { label: 'Tilt (errors)', description: 'Share of wrong answers when fatigue kicks in.', formatter: (v) => formatMetric(v * 100, '%'), fields: ['math_round1', 'math_round2', 'math_round3'], valueKey: 'tilt_rate' }
+                }
+            },
+            memory: {
+                label: 'Memory',
+                description: 'How well players perform on each cognitive memory round.',
+                metrics: {
+                    memory_round1: { label: 'Round 1 — pattern recall', description: 'Recreate a pattern accurately.', formatter: (v) => formatMetric(v), fields: ['memory_round1'], valueKey: 'avg_score' },
+                    memory_round2: { label: 'Round 2 — resist distraction', description: 'Remember a sequence while ignoring noise.', formatter: (v) => formatMetric(v), fields: ['memory_round2'], valueKey: 'avg_score' },
+                    memory_round3: { label: 'Round 3 — spot changes', description: 'Catch subtle differences between rounds.', formatter: (v) => formatMetric(v), fields: ['memory_round3'], valueKey: 'avg_score' }
+                }
+            },
+            reaction: {
+                label: 'Reaction',
+                description: 'Measure reaction speed, correctness, and tilt.',
+                metrics: {
+                    speed: { label: 'Speed (ms)', description: 'Average reaction time.', formatter: (v) => formatMetric(v, ' ms'), fields: ['reaction'], valueKey: 'avg_reaction_ms' },
+                    correctness: { label: 'Correctness', description: 'Overall accuracy on stimuli.', formatter: (v) => formatMetric(v * 100, '%'), fields: ['reaction'], valueKey: 'avg_accuracy' },
+                    tilt: { label: 'Tilt (errors)', description: 'Error streak risk (1 - accuracy).', formatter: (v) => formatMetric(v * 100, '%'), fields: ['reaction'], valueKey: 'tilt_rate' }
+                }
+            }
+        };
+
+        let statsData = {};
+        let selectedGame = 'math';
+        let selectedMetric = 'speed';
+        let selectedAttribute = 'age_band';
+
+        function formatMetric(value, suffix = '') {
+            if (value === null || value === undefined || Number.isNaN(value)) return '—';
+            const rounded = Number(value);
+            if (!Number.isFinite(rounded)) return '—';
+            return `${rounded.toFixed(suffix.includes('ms') ? 0 : 1)}${suffix}`;
+        }
+
+        function renderPills(container, items, activeKey, onClick) {
+            container.innerHTML = '';
+            items.forEach(({ key, label }) => {
+                const pill = document.createElement('button');
+                pill.className = 'pill' + (key === activeKey ? ' active' : '');
+                pill.textContent = label;
+                pill.addEventListener('click', () => onClick(key));
+                container.appendChild(pill);
+            });
+        }
+
+        function renderTable() {
+            const game = gameConfigs[selectedGame];
+            const metric = game.metrics[selectedMetric];
+            const attrData = statsData[selectedAttribute] || [];
+            const tableContainer = document.getElementById('stats-table-container');
+
+            document.getElementById('game-description').textContent = game.description;
+            document.getElementById('metric-description').textContent = metric.description;
+
+            if (!attrData.length) {
+                tableContainer.textContent = 'No data available for this attribute yet. Play a few rounds!';
+                return;
+            }
+
+            const table = document.createElement('table');
+            table.className = 'stats-table';
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            headerRow.innerHTML = `<th>Group</th>${metric.fields.map(f => `<th>${friendlyLabel(f)}</th>`).join('')}<th>Samples</th>`;
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            const tbody = document.createElement('tbody');
+            attrData.forEach((row) => {
+                const label = row.label || 'Unknown';
+                const values = metric.fields.map((field) => {
+                    const bucket = row[field];
+                    if (!bucket) return '<td>—</td>';
+                    const raw = bucket[metric.valueKey];
+                    return `<td>${metric.formatter(raw)}</td>`;
+                }).join('');
+                const samples = metric.fields.map((field) => row[field]?.samples || 0).reduce((a, b) => a + b, 0);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${label}</td>${values}<td>${samples}</td>`;
+                tbody.appendChild(tr);
+            });
+
+            table.appendChild(tbody);
+            tableContainer.innerHTML = '';
+            tableContainer.appendChild(table);
+        }
+
+        function friendlyLabel(fieldKey) {
+            if (fieldKey === 'reaction') return 'Reaction';
+            if (fieldKey === 'memory_round1') return 'Memory R1';
+            if (fieldKey === 'memory_round2') return 'Memory R2';
+            if (fieldKey === 'memory_round3') return 'Memory R3';
+            if (fieldKey === 'math_round1') return 'Math R1';
+            if (fieldKey === 'math_round2') return 'Math R2';
+            if (fieldKey === 'math_round3') return 'Math R3';
+            return fieldKey;
+        }
+
+        function setupControls() {
+            const gameContainer = document.getElementById('game-toggle');
+            renderPills(gameContainer, Object.entries(gameConfigs).map(([key, value]) => ({ key, label: value.label })), selectedGame, (key) => {
+                selectedGame = key;
+                selectedMetric = Object.keys(gameConfigs[key].metrics)[0];
+                renderMetricPills();
+                renderTable();
+            });
+
+            const attributeContainer = document.getElementById('attribute-toggle');
+            const attributeOptions = Object.keys(statsData)
+                .filter((key) => statsData[key] && statsData[key].length)
+                .map((key) => ({ key, label: attributeLabels[key] || key }));
+            if (!attributeOptions.length) {
+                attributeContainer.textContent = 'Fill out your profile (age, sex, handedness, country) to view stats.';
+            } else {
+                selectedAttribute = attributeOptions[0].key;
+                renderPills(attributeContainer, attributeOptions, selectedAttribute, (key) => {
+                    selectedAttribute = key;
+                    renderTable();
+                });
+            }
+
+            renderMetricPills();
+        }
+
+        function renderMetricPills() {
+            const metricContainer = document.getElementById('metric-toggle');
+            const metricOptions = Object.entries(gameConfigs[selectedGame].metrics).map(([key, value]) => ({ key, label: value.label }));
+            renderPills(metricContainer, metricOptions, selectedMetric, (key) => {
+                selectedMetric = key;
+                renderTable();
+            });
+        }
+
+        fetch('/api/stats/profile-breakdown')
+            .then((resp) => {
+                if (!resp.ok) {
+                    throw new Error('Unable to load stats');
+                }
+                return resp.json();
+            })
+            .then((data) => {
+                statsData = data || {};
+                setupControls();
+                renderTable();
+            })
+            .catch((err) => {
+                console.error('Failed to load attribute breakdown', err);
+                const container = document.getElementById('stats-table-container');
+                container.textContent = 'Unable to load attribute breakdown. Make sure you are signed in and your profile is complete.';
+            });
+    </script>
+</body>
+</html>

@@ -3,6 +3,8 @@ from typing import Optional
 import psycopg2
 import psycopg2.extras
 
+from typing import Optional
+
 from app.security import assert_valid_username
 from app.db import get_db_connection
 
@@ -98,6 +100,20 @@ def resolve_user_id(conn, current_user: Optional[dict], username: Optional[str],
     return get_or_create_user(conn, username, country_code)
 
 
+def is_profile_complete(user: Optional[dict]) -> bool:
+    if not user:
+        return False
+
+    required_keys = ("handedness", "sex", "country_code", "age_band")
+    for key in required_keys:
+        value = user.get(key)
+        if value is None:
+            return False
+        if isinstance(value, str) and not value.strip():
+            return False
+    return True
+
+
 def fetch_recent_attempts(conn, user_id: int) -> list[dict]:
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
         cursor.execute(
@@ -111,15 +127,15 @@ def fetch_recent_attempts(conn, user_id: int) -> list[dict]:
             WHERE user_id = %s
             UNION ALL
             SELECT 'arithmetic_r1' AS game, score AS score, created_at
-            FROM yetamax_scores
+            FROM math_round1_scores
             WHERE user_id = %s
             UNION ALL
             SELECT 'arithmetic_r2' AS game, score AS score, created_at
-            FROM maveric_scores
+            FROM math_round_mixed_scores
             WHERE user_id = %s AND (round_index = 2 OR round_index IS NULL)
             UNION ALL
             SELECT 'arithmetic_r3' AS game, score AS score, created_at
-            FROM maveric_scores
+            FROM math_round_mixed_scores
             WHERE user_id = %s AND round_index = 3
             ORDER BY created_at DESC
             LIMIT 20

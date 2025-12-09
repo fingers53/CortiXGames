@@ -25,7 +25,9 @@ from fastapi.templating import Jinja2Templates
 from passlib.context import CryptContext
 
 from scoring import calculate_reaction_game_score
-from app.services.users import normalize_profile_fields
+from app.services.users import is_profile_complete, normalize_profile_fields
+from app.utils.validation import enforce_range
+from app.services.scoring import calculate_arithmetic_score as calculate_yetamax_score
 
 load_dotenv()
 
@@ -60,14 +62,14 @@ def get_db_connection():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
-def ensure_yetamax_scores_table():
+def ensure_math_round1_scores_table():
     conn = get_db_connection()
     new_id = None
     try:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                CREATE TABLE IF NOT EXISTS yetamax_scores (
+                CREATE TABLE IF NOT EXISTS math_round1_scores (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id),
                     score INTEGER NOT NULL,
@@ -83,14 +85,14 @@ def ensure_yetamax_scores_table():
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_yetamax_scores_score_created_at
-                ON yetamax_scores (score DESC, created_at ASC)
+                CREATE INDEX IF NOT EXISTS idx_math_round1_scores_score_created_at
+                ON math_round1_scores (score DESC, created_at ASC)
                 """
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_yetamax_scores_user_recent
-                ON yetamax_scores (user_id, created_at DESC)
+                CREATE INDEX IF NOT EXISTS idx_math_round1_scores_user_recent
+                ON math_round1_scores (user_id, created_at DESC)
                 """
             )
 
@@ -106,12 +108,12 @@ def ensure_yetamax_scores_table():
             old_table_exists = cursor.fetchone()[0]
 
             if old_table_exists:
-                cursor.execute("SELECT COUNT(*) FROM yetamax_scores")
+                cursor.execute("SELECT COUNT(*) FROM math_round1_scores")
                 new_count = cursor.fetchone()[0]
                 if new_count == 0:
                     cursor.execute(
                         """
-                        INSERT INTO yetamax_scores (
+                        INSERT INTO math_round1_scores (
                             user_id, score, correct_count, wrong_count,
                             avg_time_ms, min_time_ms, is_valid, raw_payload, created_at
                         )
@@ -125,17 +127,17 @@ def ensure_yetamax_scores_table():
         conn.close()
 
 
-# Ensure Yetamax storage exists on startup
-ensure_yetamax_scores_table()
+# Ensure math round storage exists on startup
+ensure_math_round1_scores_table()
 
 
-def ensure_maveric_scores_table():
+def ensure_math_round_mixed_scores_table():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                CREATE TABLE IF NOT EXISTS maveric_scores (
+                CREATE TABLE IF NOT EXISTS math_round_mixed_scores (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id),
                     score INTEGER NOT NULL,
@@ -154,20 +156,20 @@ def ensure_maveric_scores_table():
             )
             cursor.execute(
                 """
-                ALTER TABLE public.maveric_scores
+                ALTER TABLE public.math_round_mixed_scores
                     ADD COLUMN IF NOT EXISTS round_index INTEGER;
                 """
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_maveric_scores_score_created_at
-                ON maveric_scores (score DESC, created_at ASC)
+                CREATE INDEX IF NOT EXISTS idx_math_round_mixed_scores_score_created_at
+                ON math_round_mixed_scores (score DESC, created_at ASC)
                 """
             )
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_maveric_scores_user_recent
-                ON maveric_scores (user_id, created_at DESC)
+                CREATE INDEX IF NOT EXISTS idx_math_round_mixed_scores_user_recent
+                ON math_round_mixed_scores (user_id, created_at DESC)
                 """
             )
         conn.commit()
@@ -184,9 +186,9 @@ def ensure_math_session_scores_table():
                 CREATE TABLE IF NOT EXISTS math_session_scores (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id),
-                    round1_score_id INTEGER NOT NULL REFERENCES yetamax_scores(id),
-                    round2_score_id INTEGER NOT NULL REFERENCES maveric_scores(id),
-                    round3_score_id INTEGER REFERENCES maveric_scores(id),
+                    round1_score_id INTEGER NOT NULL REFERENCES math_round1_scores(id),
+                    round2_score_id INTEGER NOT NULL REFERENCES math_round_mixed_scores(id),
+                    round3_score_id INTEGER REFERENCES math_round_mixed_scores(id),
                     combined_score INTEGER NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
@@ -195,7 +197,7 @@ def ensure_math_session_scores_table():
             cursor.execute(
                 """
                 ALTER TABLE public.math_session_scores
-                    ADD COLUMN IF NOT EXISTS round3_score_id INTEGER REFERENCES maveric_scores(id);
+                    ADD COLUMN IF NOT EXISTS round3_score_id INTEGER REFERENCES math_round_mixed_scores(id);
                 """
             )
             cursor.execute(
@@ -210,7 +212,7 @@ def ensure_math_session_scores_table():
 
 
 # Ensure Round 2 and combined storage exist on startup
-ensure_maveric_scores_table()
+ensure_math_round_mixed_scores_table()
 ensure_math_session_scores_table()
 ensure_user_profile_columns()
 ensure_memory_score_payload_column()
@@ -424,30 +426,6 @@ def validate_answer_record(answer_record: List[Dict]):
             raise HTTPException(status_code=422, detail="Each answer must include correctness")
 
 
-def enforce_range(value: float, minimum: float, maximum: float, label: str):
-    if value is None or not math.isfinite(value) or value < minimum or value > maximum:
-        raise HTTPException(
-            status_code=422,
-            detail=f"{label} must be between {minimum} and {maximum}",
-        )
-
-
-def calculate_yetamax_score(
-    correct_count: int, wrong_count: int, avg_time_ms: float, per_questions=None
-) -> int:
-    base_score = correct_count * 10
-    penalty = wrong_count * 2
-
-    streak_penalty = 0
-    if per_questions:
-        for entry in per_questions:
-            wrong_attempts = int(entry.get("wrong_attempts") or 0)
-            if wrong_attempts > 1:
-                streak_penalty += wrong_attempts - 1
-
-    return base_score - penalty - streak_penalty
-
-
 def compute_memory_scores(question_log: List[Dict]) -> dict:
     """Compute per-round scores, partial credit, and timing insights.
 
@@ -570,11 +548,11 @@ def fetch_recent_attempts(conn, user_id: int) -> List[dict]:
             WHERE user_id = %s
             UNION ALL
             SELECT 'arithmetic_r1' AS game, score AS score, created_at
-            FROM yetamax_scores
+            FROM math_round1_scores
             WHERE user_id = %s
             UNION ALL
             SELECT 'arithmetic_r2' AS game, score AS score, created_at
-            FROM maveric_scores
+            FROM math_round_mixed_scores
             WHERE user_id = %s
             ORDER BY created_at DESC
             LIMIT 20
@@ -735,25 +713,25 @@ def summarize_math_times(rows: list, question_key: str) -> tuple[dict, float]:
 def fetch_math_insights(conn, user_id: int) -> dict:
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
         cursor.execute(
-            "SELECT raw_payload, score FROM yetamax_scores WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
+            "SELECT raw_payload, score FROM math_round1_scores WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
             (user_id,),
         )
         round1_rows = cursor.fetchall()
 
         cursor.execute(
-            "SELECT raw_payload, score FROM maveric_scores WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
+            "SELECT raw_payload, score FROM math_round_mixed_scores WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
             (user_id,),
         )
         round2_rows = cursor.fetchall()
 
         cursor.execute(
-            "SELECT MAX(score) FROM yetamax_scores WHERE user_id = %s",
+            "SELECT MAX(score) FROM math_round1_scores WHERE user_id = %s",
             (user_id,),
         )
         best_r1 = cursor.fetchone()[0]
 
         cursor.execute(
-            "SELECT MAX(score) FROM maveric_scores WHERE user_id = %s",
+            "SELECT MAX(score) FROM math_round_mixed_scores WHERE user_id = %s",
             (user_id,),
         )
         best_r2 = cursor.fetchone()[0]
@@ -808,22 +786,30 @@ async def reaction_game(request: Request, current_user=Depends(get_current_user)
 
 @app.get("/leaderboard", response_class=HTMLResponse)
 async def leaderboard(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     return render_template("leaderboards/leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/reaction-game", response_class=HTMLResponse)
 async def reaction_game_leaderboard(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     return render_template("leaderboards/reaction_leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/leaderboard/memory-game", response_class=HTMLResponse)
 async def memory_game_leaderboard(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     return render_template("leaderboards/memory_leaderboard.html", request, {"current_user": current_user})
 
 
-@app.get("/leaderboard/yetamax", response_class=HTMLResponse)
-async def yetamax_leaderboard_redirect(request: Request, current_user=Depends(get_current_user)):
-    return render_template("round1/yetamax_leaderboard.html", request, {"current_user": current_user})
+@app.get("/leaderboard/math", response_class=HTMLResponse)
+async def math_leaderboard_redirect(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+    return render_template("round1/math_round1_leaderboard.html", request, {"current_user": current_user})
 
 
 @app.get("/signup", response_class=HTMLResponse)
@@ -1165,7 +1151,9 @@ async def submit_memory_score(
 
 
 @app.get("/api/leaderboard/reaction-game")
-async def reaction_leaderboard_api():
+async def reaction_leaderboard_api(current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sign in required")
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -1211,7 +1199,9 @@ async def reaction_leaderboard_api():
         conn.close()
 
 @app.get("/api/leaderboard/memory-game")
-async def memory_leaderboard_api():
+async def memory_leaderboard_api(current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sign in required")
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -1270,10 +1260,9 @@ async def memory_leaderboard_api():
 
 
 @app.get("/math-game", response_class=HTMLResponse)
-@app.get("/math-game/yetamax", response_class=HTMLResponse)
-async def yetamax_game(request: Request, current_user=Depends(get_current_user)):
+async def math_game(request: Request, current_user=Depends(get_current_user)):
     return render_template(
-        "round1/math_game_yetamax.html",
+        "round1/math_rounds_game.html",
         request,
         {
             "current_user": current_user,
@@ -1282,12 +1271,13 @@ async def yetamax_game(request: Request, current_user=Depends(get_current_user))
 
 
 @app.get("/math-game/leaderboard", response_class=HTMLResponse)
-@app.get("/math-game/yetamax/leaderboard", response_class=HTMLResponse)
-async def yetamax_leaderboard_page(
+async def math_leaderboard_page(
     request: Request, current_user=Depends(get_current_user)
 ):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     return render_template(
-        "round1/yetamax_leaderboard.html",
+        "round1/math_round1_leaderboard.html",
         request,
         {
             "current_user": current_user,
@@ -1296,10 +1286,13 @@ async def yetamax_leaderboard_page(
 
 
 @app.get("/math-game/stats", response_class=HTMLResponse)
-@app.get("/math-game/yetamax/stats", response_class=HTMLResponse)
-async def yetamax_stats_page(request: Request, current_user=Depends(get_current_user)):
+async def math_stats_page(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+    if not is_profile_complete(current_user):
+        return RedirectResponse("/profile", status_code=status.HTTP_302_FOUND)
     return render_template(
-        "round1/yetamax_stats.html",
+        "round1/math_round1_stats.html",
         request,
         {
             "current_user": current_user,
@@ -1307,12 +1300,20 @@ async def yetamax_stats_page(request: Request, current_user=Depends(get_current_
     )
 
 
-@app.get("/math-game/maveric/leaderboard", response_class=HTMLResponse)
-async def maveric_leaderboard_page(
+@app.get("/math-game/round-mixed/leaderboard", response_class=HTMLResponse)
+async def mixed_leaderboard_page(
     request: Request, current_user=Depends(get_current_user)
 ):
+    if not current_user:
+        return RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+    round_param = request.query_params.get("round")
+    template_name = (
+        "round3/math_round3_leaderboard.html"
+        if round_param == "3"
+        else "round2/math_round2_leaderboard.html"
+    )
     return render_template(
-        "round2/maveric_leaderboard.html",
+        template_name,
         request,
         {
             "current_user": current_user,
@@ -1320,10 +1321,7 @@ async def maveric_leaderboard_page(
     )
 
 
-@app.post("/api/math-game/yetamax/submit")
-async def submit_yetamax_score(
-    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
-):
+async def save_round1_score(request: Request, current_user):
     if not current_user:
         raise HTTPException(status_code=401, detail="Login required")
 
@@ -1368,7 +1366,7 @@ async def submit_yetamax_score(
     }
 
     if not current_user:
-        response_payload["yetamax_score_id"] = None
+        response_payload["round1_score_id"] = None
         response_payload["message"] = "Login to save your Round 1 score"
         return JSONResponse(content=response_payload)
 
@@ -1377,7 +1375,7 @@ async def submit_yetamax_score(
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO yetamax_scores (
+                INSERT INTO math_round1_scores (
                     user_id, score, correct_count, wrong_count,
                     avg_time_ms, min_time_ms, is_valid, raw_payload
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -1411,11 +1409,18 @@ async def submit_yetamax_score(
     finally:
         conn.close()
 
-    response_payload["yetamax_score_id"] = new_id
+    response_payload["round1_score_id"] = new_id
     return JSONResponse(content=response_payload)
 
 
-async def _submit_maveric_score(
+@app.post("/api/math-game/round1/submit")
+async def submit_round1_score(
+    request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
+):
+    return await save_round1_score(request, current_user)
+
+
+async def _save_round_mixed_score(
     request: Request,
     current_user,
     round_index: int,
@@ -1448,6 +1453,7 @@ async def _submit_maveric_score(
     enforce_range(score_value, -2000, 50000, "Score")
 
     raw_payload = data.copy()
+    # Persist which mixed round this score represents (2 = harder, 3 = easier)
     raw_payload.update({"score": score_value, "is_valid": is_valid, "round_index": round_index})
 
     score_key = "round2_score" if round_index == 2 else "round3_score"
@@ -1459,7 +1465,7 @@ async def _submit_maveric_score(
     }
 
     if not current_user:
-        response_payload["maveric_score_id"] = None
+        response_payload["round_mixed_score_id"] = None
         response_payload["message"] = "Login to save your Round %d score" % round_index
         return response_payload
 
@@ -1468,7 +1474,7 @@ async def _submit_maveric_score(
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO maveric_scores (
+                INSERT INTO math_round_mixed_scores (
                     user_id, score, correct_count, wrong_count,
                     avg_time_ms, min_time_ms, total_questions, is_valid, raw_payload, round_index, updated_at
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
@@ -1504,27 +1510,35 @@ async def _submit_maveric_score(
     finally:
         conn.close()
 
-    response_payload["maveric_score_id"] = new_id
+    response_payload["round_mixed_score_id"] = new_id
     return response_payload
 
 
-@app.post("/api/math-game/yetamax/round2/submit")
-async def submit_maveric_score(
+async def save_round2_score(request: Request, current_user):
+    return await _save_round_mixed_score(request, current_user, 2)
+
+
+async def save_round3_score(request: Request, current_user):
+    return await _save_round_mixed_score(request, current_user, 3)
+
+
+@app.post("/api/math-game/round2/submit")
+async def submit_round2_score(
     request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
 ):
-    response = await _submit_maveric_score(request, current_user, 2)
+    response = await save_round2_score(request, current_user)
     return JSONResponse(content=response)
 
 
-@app.post("/api/math-game/yetamax/round3/submit")
-async def submit_maveric_score_round3(
+@app.post("/api/math-game/round3/submit")
+async def submit_round3_score(
     request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
 ):
-    response = await _submit_maveric_score(request, current_user, 3)
+    response = await save_round3_score(request, current_user)
     return JSONResponse(content=response)
 
 
-@app.post("/api/math-game/yetamax/session/submit")
+@app.post("/api/math-game/session/submit")
 async def submit_math_session(
     request: Request, current_user=Depends(get_current_user), _=Depends(csrf_protected)
 ):
@@ -1581,8 +1595,10 @@ async def submit_math_session(
     return JSONResponse(content={"status": "success", "session_id": new_id})
 
 
-@app.get("/api/math-game/yetamax/leaderboard")
-async def yetamax_leaderboard_api():
+@app.get("/api/math-game/round1/leaderboard")
+async def round1_leaderboard_api(current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sign in required")
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
@@ -1595,7 +1611,7 @@ async def yetamax_leaderboard_api():
                     s.wrong_count,
                     s.avg_time_ms,
                     s.created_at
-                FROM yetamax_scores s
+                FROM math_round1_scores s
                 JOIN users u ON u.id = s.user_id
                 WHERE s.is_valid = TRUE
                 ORDER BY s.score DESC, s.created_at ASC
@@ -1605,13 +1621,14 @@ async def yetamax_leaderboard_api():
             rows = cursor.fetchall()
         scores = []
         for row in rows:
+            avg_time_raw = row.get("avg_time_ms") if isinstance(row, dict) else row["avg_time_ms"]
             scores.append(
                 {
                     "username": row["username"],
                     "score": int(row["score"]),
                     "correct_count": int(row["correct_count"]),
                     "wrong_count": int(row["wrong_count"]),
-                    "avg_time_ms": float(row["avg_time_ms"]),
+                    "avg_time_ms": float(avg_time_raw) if avg_time_raw is not None else None,
                     "created_at": row["created_at"].isoformat(),
                 }
             )
@@ -1620,8 +1637,10 @@ async def yetamax_leaderboard_api():
         conn.close()
 
 
-@app.get("/api/math-game/maveric/leaderboard")
-async def maveric_leaderboard_api(request: Request):
+@app.get("/api/math-game/round-mixed/leaderboard")
+async def mixed_round_leaderboard_api(request: Request, current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sign in required")
     round_index_param = request.query_params.get("round_index")
     round_index = None
     try:
@@ -1641,7 +1660,7 @@ async def maveric_leaderboard_api(request: Request):
                     s.wrong_count,
                     s.avg_time_ms,
                     s.created_at
-                FROM maveric_scores s
+                FROM math_round_mixed_scores s
                 JOIN users u ON u.id = s.user_id
                 WHERE s.is_valid = TRUE
                   AND (%s IS NULL OR s.round_index = %s OR (s.round_index IS NULL AND %s = 2))
@@ -1653,13 +1672,14 @@ async def maveric_leaderboard_api(request: Request):
             rows = cursor.fetchall()
         scores = []
         for row in rows:
+            avg_time_raw = row.get("avg_time_ms") if isinstance(row, dict) else row["avg_time_ms"]
             scores.append(
                 {
                     "username": row["username"],
                     "score": int(row["score"]),
                     "correct_count": int(row["correct_count"]),
                     "wrong_count": int(row["wrong_count"]),
-                    "avg_time_ms": float(row["avg_time_ms"]),
+                    "avg_time_ms": float(avg_time_raw) if avg_time_raw is not None else None,
                     "created_at": row["created_at"].isoformat(),
                 }
             )
@@ -1668,8 +1688,8 @@ async def maveric_leaderboard_api(request: Request):
         conn.close()
 
 
-@app.get("/api/math-game/yetamax/score-distribution")
-async def yetamax_score_distribution():
+@app.get("/api/math-game/score-distribution")
+async def math_score_distribution():
     bucket_width = 20
     conn = get_db_connection()
     try:
@@ -1677,7 +1697,7 @@ async def yetamax_score_distribution():
             cursor.execute(
                 """
                 SELECT FLOOR(score::numeric / %s) AS bucket, COUNT(*)
-                FROM yetamax_scores
+                FROM math_round1_scores
                 WHERE is_valid = TRUE
                 GROUP BY bucket
                 ORDER BY bucket
@@ -1695,9 +1715,215 @@ async def yetamax_score_distribution():
         conn.close()
 
 
-@app.get("/api/math-game/yetamax/difficulty-summary")
-async def yetamax_difficulty_summary():
+@app.get("/api/math-game/difficulty-summary")
+async def math_difficulty_summary():
     return JSONResponse(content={"hardest_questions": [], "easiest_questions": []})
+
+
+def _attribute_label_expr(attr: str) -> str:
+    if attr == "age_band":
+        return "COALESCE(NULLIF(u.age_band, ''), NULLIF(u.age_range, ''), 'Unknown')"
+    if attr == "sex":
+        return "COALESCE(NULLIF(u.sex, ''), NULLIF(u.gender, ''), 'Unknown')"
+    if attr == "country_code":
+        return "COALESCE(NULLIF(u.country_code, ''), 'Unknown')"
+    return "COALESCE(NULLIF(u.handedness, ''), 'Unknown')"
+
+
+@app.get("/api/stats/profile-breakdown")
+async def profile_attribute_breakdown(current_user=Depends(get_current_user)):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    if not is_profile_complete(current_user):
+        raise HTTPException(status_code=403, detail="Complete your profile to view stats")
+
+    conn = get_db_connection()
+    attr_keys = ("age_band", "sex", "handedness", "country_code")
+    allowed_attrs = [key for key in attr_keys if current_user.get(key)]
+
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+            response: dict[str, list[dict[str, object]]] = {}
+
+            for attr in allowed_attrs:
+                expr = _attribute_label_expr(attr)
+                stats_by_label: dict[str, dict[str, object]] = {}
+
+                def add_metric(label: str, key: str, value: dict[str, object]):
+                    entry = stats_by_label.setdefault("" if label is None else str(label), {"label": label})
+                    entry[key] = value
+
+                cursor.execute(
+                    f"""
+                    SELECT
+                        {expr} AS label,
+                        AVG(s.correct_count::float / NULLIF(s.correct_count + s.wrong_count, 0)) AS avg_accuracy,
+                        AVG(s.avg_time_ms) AS avg_speed_ms,
+                        AVG(s.wrong_count::float / NULLIF(s.correct_count + s.wrong_count, 0)) AS tilt_rate,
+                        COUNT(*) AS samples
+                    FROM math_round1_scores s
+                    JOIN users u ON u.id = s.user_id
+                    WHERE s.is_valid = TRUE
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "math_round1",
+                        {
+                            "avg_accuracy": row["avg_accuracy"],
+                            "avg_speed_ms": row["avg_speed_ms"],
+                            "tilt_rate": row["tilt_rate"],
+                            "samples": row["samples"],
+                        },
+                    )
+
+                cursor.execute(
+                    f"""
+                    SELECT
+                        {expr} AS label,
+                        AVG(s.correct_count::float / NULLIF(COALESCE(s.total_questions, s.correct_count + s.wrong_count), 0)) AS avg_accuracy,
+                        AVG(s.avg_time_ms) AS avg_speed_ms,
+                        AVG(s.wrong_count::float / NULLIF(COALESCE(s.total_questions, s.correct_count + s.wrong_count), 0)) AS tilt_rate,
+                        COUNT(*) AS samples
+                    FROM math_round_mixed_scores s
+                    JOIN users u ON u.id = s.user_id
+                    WHERE s.is_valid = TRUE AND (s.round_index = 2 OR s.round_index IS NULL)
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "math_round2",
+                        {
+                            "avg_accuracy": row["avg_accuracy"],
+                            "avg_speed_ms": row["avg_speed_ms"],
+                            "tilt_rate": row["tilt_rate"],
+                            "samples": row["samples"],
+                        },
+                    )
+
+                cursor.execute(
+                    f"""
+                    SELECT
+                        {expr} AS label,
+                        AVG(s.correct_count::float / NULLIF(COALESCE(s.total_questions, s.correct_count + s.wrong_count), 0)) AS avg_accuracy,
+                        AVG(s.avg_time_ms) AS avg_speed_ms,
+                        AVG(s.wrong_count::float / NULLIF(COALESCE(s.total_questions, s.correct_count + s.wrong_count), 0)) AS tilt_rate,
+                        COUNT(*) AS samples
+                    FROM math_round_mixed_scores s
+                    JOIN users u ON u.id = s.user_id
+                    WHERE s.is_valid = TRUE AND s.round_index = 3
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "math_round3",
+                        {
+                            "avg_accuracy": row["avg_accuracy"],
+                            "avg_speed_ms": row["avg_speed_ms"],
+                            "tilt_rate": row["tilt_rate"],
+                            "samples": row["samples"],
+                        },
+                    )
+
+                cursor.execute(
+                    f"""
+                    SELECT
+                        {expr} AS label,
+                        AVG(r.accuracy) AS avg_accuracy,
+                        AVG(r.average_time_ms) AS avg_reaction_ms,
+                        AVG(1 - r.accuracy) AS tilt_rate,
+                        COUNT(*) AS samples
+                    FROM reaction_scores r
+                    JOIN users u ON u.id = r.user_id
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "reaction",
+                        {
+                            "avg_accuracy": row["avg_accuracy"],
+                            "avg_reaction_ms": row["avg_reaction_ms"],
+                            "tilt_rate": row["tilt_rate"],
+                            "samples": row["samples"],
+                        },
+                    )
+
+                cursor.execute(
+                    f"""
+                    SELECT {expr} AS label, AVG(m.round1_score) AS avg_score, COUNT(*) AS samples
+                    FROM memory_scores m
+                    JOIN users u ON u.id = m.user_id
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "memory_round1",
+                        {
+                            "avg_score": row["avg_score"],
+                            "samples": row["samples"],
+                        },
+                    )
+
+                cursor.execute(
+                    f"""
+                    SELECT {expr} AS label, AVG(m.round2_score) AS avg_score, COUNT(*) AS samples
+                    FROM memory_scores m
+                    JOIN users u ON u.id = m.user_id
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "memory_round2",
+                        {
+                            "avg_score": row["avg_score"],
+                            "samples": row["samples"],
+                        },
+                    )
+
+                cursor.execute(
+                    f"""
+                    SELECT {expr} AS label, AVG(m.round3_score) AS avg_score, COUNT(*) AS samples
+                    FROM memory_scores m
+                    JOIN users u ON u.id = m.user_id
+                    GROUP BY label
+                    ORDER BY label
+                    """
+                )
+                for row in cursor.fetchall():
+                    add_metric(
+                        row["label"],
+                        "memory_round3",
+                        {
+                            "avg_score": row["avg_score"],
+                            "samples": row["samples"],
+                        },
+                    )
+
+                response[attr] = list(
+                    sorted(stats_by_label.values(), key=lambda row: ("" if row["label"] is None else str(row["label"]).lower()))
+                )
+
+        return JSONResponse(content=response)
+    finally:
+        conn.close()
 
 
 @app.get("/api/my-best-scores")
@@ -1733,8 +1959,8 @@ async def my_best_scores(username: str):
             cursor.execute(
                 """
                 SELECT GREATEST(
-                    COALESCE((SELECT MAX(score) FROM yetamax_scores WHERE user_id = %s), 0),
-                    COALESCE((SELECT MAX(score) FROM maveric_scores WHERE user_id = %s), 0),
+                    COALESCE((SELECT MAX(score) FROM math_round1_scores WHERE user_id = %s), 0),
+                    COALESCE((SELECT MAX(score) FROM math_round_mixed_scores WHERE user_id = %s), 0),
                     COALESCE((SELECT MAX(score) FROM math_scores WHERE user_id = %s), 0),
                     COALESCE((SELECT MAX(combined_score) FROM math_session_scores WHERE user_id = %s), 0)
                 )

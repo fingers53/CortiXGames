@@ -7,27 +7,29 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/auth.css">
     <link rel="stylesheet" href="/static/styles.css">
-    <link rel="stylesheet" href="/math-games/static/css/round1/yetamax.css">
+    <link rel="stylesheet" href="/math-games/static/css/round1/math-rounds.css">
 </head>
 <body>
     <div class="auth-bar">
-        <a href="/" class="home-link" aria-label="Home">🏠</a>
-        <div class="auth-status">
+        <div class="app-brand">
+            <a href="/" class="brand-link">CORTIX <span>Games</span></a>
+        </div>
+        <div class="nav-actions">
+            <a href="/" class="nav-button">Home</a>
             {% if current_user %}
-            <span class="status-pill">Logged in</span>
-            <span class="status-name">{{ current_user.username }}</span>
+            <span class="user-chip">Logged in as <a href="/profile" class="nav-link">{{ current_user.username }}</a></span>
+            <a class="nav-button" href="/logout">Logout</a>
             {% else %}
-            <span class="status-pill guest">Guest</span>
-            <span class="status-name">Not signed in</span>
+            <a class="nav-link" href="/login">Sign in</a>
             {% endif %}
         </div>
     </div>
 
-    <div class="yetamax-container">
-        <header class="yetamax-header">
+    <div class="math-rounds-container">
+        <header class="math-rounds-header">
             <div>
-                <h1 id="page-title">Round 2 Leaderboard</h1>
-                <p class="subtitle" id="page-subtitle">90s advanced mix (decimals and missing percents)</p>
+                <h1 id="page-title">Round 3 Leaderboard</h1>
+                <p class="subtitle" id="page-subtitle">90s challenging mix (missing equations and percent changes)</p>
             </div>
             <div class="actions">
                 <a class="link" href="/math-game">Play</a>
@@ -37,7 +39,7 @@
 
         <section class="panel breakdown">
             <h2>Top 20 scores</h2>
-            <table class="leaderboard-table" aria-label="Top Round 2 scores">
+            <table class="leaderboard-table" aria-label="Top Round 3 scores">
                 <thead>
                     <tr>
                         <th>Rank</th>
@@ -55,16 +57,17 @@
     </div>
 
     <script>
-        const params = new URLSearchParams(window.location.search);
-        const roundIndex = Number(params.get('round') || '2');
-
         async function loadLeaderboard() {
             try {
-                const resp = await fetch(`/api/math-game/maveric/leaderboard?round_index=${roundIndex === 3 ? 3 : 2}`);
+                const resp = await fetch(`/api/math-game/round-mixed/leaderboard?round_index=3`);
                 const data = await resp.json();
                 const tbody = document.getElementById('leaderboard-rows');
                 tbody.innerHTML = '';
                 (data.scores || []).forEach((row, idx) => {
+                    const timedOut = (row.correct_count || 0) + (row.wrong_count || 0) === 0;
+                    const avgTime = Number.isFinite(row.avg_time_ms) && !timedOut
+                        ? `${row.avg_time_ms.toFixed(1)}`
+                        : 'All questions timed out';
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${idx + 1}</td>
@@ -72,7 +75,7 @@
                         <td>${row.score}</td>
                         <td>${row.correct_count}</td>
                         <td>${row.wrong_count}</td>
-                        <td>${row.avg_time_ms.toFixed(1)}</td>
+                        <td>${avgTime}</td>
                         <td>${new Date(row.created_at).toLocaleString()}</td>
                     `;
                     tbody.appendChild(tr);
@@ -85,19 +88,6 @@
             }
         }
 
-        function updateHeading() {
-            const title = document.getElementById('page-title');
-            const subtitle = document.getElementById('page-subtitle');
-            if (roundIndex === 3) {
-                title.textContent = 'Round 3 Leaderboard';
-                subtitle.textContent = '90s challenging mix (missing equations and percent changes)';
-            } else {
-                title.textContent = 'Round 2 Leaderboard';
-                subtitle.textContent = '90s advanced mix (decimals and missing percents)';
-            }
-        }
-
-        updateHeading();
         loadLeaderboard();
     </script>
 </body>

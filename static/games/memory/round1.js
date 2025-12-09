@@ -78,7 +78,7 @@ function endRound(onRoundComplete) {
     canvas.removeEventListener("click", handleCanvasClick);
     hideCanvas();
     clearGrid();
-    setTimeout(onRoundComplete, 500);
+    onRoundComplete();
 }
 
 function handleTimeOut(onRoundComplete) {

@@ -221,6 +221,8 @@ async function showEndScreen() {
     };
 
     const username = getUsername();
+    const localScore = computeLocalScore();
+    buildEndScreen(localScore, "Saving your score…");
 
     fetch("/reaction-game/submit_score", {
         method: "POST",
@@ -241,12 +243,12 @@ async function showEndScreen() {
                 buildEndScreen(data.scoreResult);
             } else {
                 console.error("Score submission error:", data);
-                buildEndScreen(computeLocalScore());
+                buildEndScreen(localScore, "Score saved locally. Server unavailable.");
             }
         })
         .catch((error) => {
             console.error("Error submitting score:", error);
-            buildEndScreen(computeLocalScore());
+            buildEndScreen(localScore, "Score saved locally. Server unavailable.");
         });
 }
 
@@ -301,13 +303,17 @@ function computeLocalScore() {
     };
 }
 
-function buildEndScreen(scoreResult) {
+function buildEndScreen(scoreResult, bannerText = null) {
     const endScreen = document.getElementById("end-screen");
     if (!endScreen) return;
 
+    const header = bannerText
+        ? `<h1>${bannerText}</h1>`
+        : `<h1>Final Score: ${scoreResult.finalScore}</h1>`;
+
     endScreen.innerHTML = `
         <div style="background-color: #fdf5e6; border: 3px solid #f4a460; padding: 20px; border-radius: 10px;">
-            <h1>Final Score: ${scoreResult.finalScore}</h1>
+            ${header}
             <div class="score-breakdown">
                 <div class="column">
                     <h2>Score</h2>

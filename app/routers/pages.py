@@ -37,9 +37,9 @@ async def memory_game_leaderboard(request: Request, current_user=Depends(get_cur
     return render_template(templates, "leaderboards/memory_leaderboard.html", request, {"current_user": current_user})
 
 
-@router.get("/leaderboard/yetamax", response_class=HTMLResponse)
-async def yetamax_leaderboard_redirect(request: Request, current_user=Depends(get_current_user)):
-    return render_template(templates, "round1/yetamax_leaderboard.html", request, {"current_user": current_user})
+@router.get("/leaderboard/math", response_class=HTMLResponse)
+async def math_leaderboard_redirect(request: Request, current_user=Depends(get_current_user)):
+    return render_template(templates, "round1/math_round1_leaderboard.html", request, {"current_user": current_user})
 
 
 @router.get("/signup", response_class=HTMLResponse)

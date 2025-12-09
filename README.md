@@ -11,18 +11,23 @@ Authentication uses signed session cookies (username + password), and all scores
 ## Project structure
 
 ```
-app/                 # New application package: config, db helpers, routers, services
-math-games/          # Arithmetic templates and static assets (round 1 + round 2)
-static/              # Shared assets, grouped by game under static/games/
-  games/
-    memory/          # Memory JS/CSS modules
-    reaction/        # Reaction JS/CSS
-templates/           # Jinja templates
-  games/             # Memory/Reaction gameplay templates
-  leaderboards/      # Shared leaderboard pages
-README.md            # This file
-main.py              # FastAPI entrypoint (mounts templates/static, routes)
-requirements.txt     # Python dependencies
+CortiXGames/
+├─ app/
+│   ├─ routers/
+│   └─ …
+├─ templates/
+│   ├─ landing_page.html
+│   ├─ profile/
+│   ├─ reaction/
+│   ├─ memory/
+│   └─ maths/
+├─ static/
+│   ├─ css/
+│   ├─ js/
+│   ├─ reaction/
+│   ├─ memory/
+│   └─ maths/
+└─ main.py
 ```
 
 ## Running locally

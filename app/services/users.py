@@ -99,7 +99,6 @@ def resolve_user_id(conn, current_user: Optional[dict], username: Optional[str],
     assert_valid_username(username or "")
     return get_or_create_user(conn, username, country_code)
 
-
 def is_profile_complete(user: Optional[dict]) -> bool:
     if not user:
         return False

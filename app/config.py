@@ -5,9 +5,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-TEMPLATE_DIRS = [BASE_DIR / "templates", BASE_DIR / "math-games" / "templates"]
+TEMPLATE_DIRS = [BASE_DIR / "templates"]
 STATIC_DIR = BASE_DIR / "static"
-MATH_STATIC_DIR = BASE_DIR / "math-games" / "static"
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"

@@ -1,7 +1,6 @@
 import psycopg2
 from .config import DATABASE_URL
 
-
 def get_db_connection():
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL is not set")
@@ -69,7 +68,6 @@ def ensure_math_round1_scores_table():
     finally:
         conn.close()
 
-
 def ensure_math_round_mixed_scores_table():
     conn = get_db_connection()
     try:
@@ -115,7 +113,6 @@ def ensure_math_round_mixed_scores_table():
     finally:
         conn.close()
 
-
 def ensure_math_session_scores_table():
     conn = get_db_connection()
     try:
@@ -148,7 +145,6 @@ def ensure_math_session_scores_table():
         conn.commit()
     finally:
         conn.close()
-
 
 def ensure_user_profile_columns():
     """Add optional profile columns to the users table if they are missing."""
@@ -190,7 +186,6 @@ def ensure_user_profile_columns():
     finally:
         conn.close()
 
-
 def ensure_memory_score_payload_column():
     """Add a payload column to memory_scores to capture richer analytics."""
     conn = get_db_connection()
@@ -205,7 +200,6 @@ def ensure_memory_score_payload_column():
         conn.commit()
     finally:
         conn.close()
-
 
 def ensure_achievements_tables():
     """Create achievements tables if they do not exist."""
@@ -237,3 +231,11 @@ def ensure_achievements_tables():
         conn.commit()
     finally:
         conn.close()
+
+def init_db_schema():
+    ensure_math_round1_scores_table()
+    ensure_math_round_mixed_scores_table()
+    ensure_math_session_scores_table()
+    ensure_user_profile_columns()
+    ensure_memory_score_payload_column()
+    ensure_achievements_tables()
